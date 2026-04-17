@@ -1,5 +1,5 @@
 ---
-description: Tech stack and build commands for VoiceClaude
+description: Tech stack and build commands for VoxGate
 globs: "*.py,*.html,*.js,*.json"
 ---
 

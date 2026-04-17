@@ -1,11 +1,11 @@
-# VoiceClaude Setup
+# VoxGate Setup
 
 ## Option A: Docker (recommended)
 
 ### 1. Clone and configure
 ```bash
-git clone git@github.com:gzuercher/voice-claude.git
-cd voice-claude
+git clone git@github.com:gzuercher/vox-gate.git
+cd vox-gate
 cp .env.example .env
 # Edit .env with your tokens and target URLs
 ```
@@ -69,13 +69,13 @@ caddy run
 ## Systemd (per instance)
 
 ```ini
-# /etc/systemd/system/voiceclaude-claude.service
+# /etc/systemd/system/voxgate-claude.service
 [Unit]
-Description=VoiceClaude - Claude
+Description=VoxGate - Claude
 After=network.target
 
 [Service]
-WorkingDirectory=/opt/voiceclaude
+WorkingDirectory=/opt/voxgate
 Environment="INSTANCE_NAME=Claude"
 Environment="INSTANCE_COLOR=#c8ff00"
 Environment="TARGET_URL=http://localhost:9000/prompt"

@@ -136,4 +136,4 @@ class TestStaticFiles:
         client = _reload_app()
         res = client.get("/")
         assert res.status_code == 200
-        assert "VoiceClaude" in res.text
+        assert "VoxGate" in res.text

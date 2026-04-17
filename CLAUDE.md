@@ -1,4 +1,4 @@
-# VoiceClaude – Claude Code Playbook
+# VoxGate – Claude Code Playbook
 
 Voice gateway PWA – each instance forwards speech input via HTTP to a configurable backend.
 No Claude CLI in the container; the server is a pure forwarding proxy.

@@ -1,4 +1,4 @@
-# VoiceClaude
+# VoxGate
 
 Voice gateway for your phone – speak and forward to any backend.
 
@@ -8,13 +8,13 @@ Each instance targets one backend (Claude Code, Dokbot, etc.) via a simple HTTP 
 
 ```
 ┌─────────────┐                    ┌──────────────────┐
-│  PWA:       │   POST /prompt     │  VoiceClaude     │   POST TARGET_URL
+│  PWA:       │   POST /prompt     │  VoxGate     │   POST TARGET_URL
 │  "Claude"   │  ───────────────►  │  Container :8001 │  ───────────────►  Claude Code
 │  (green)    │  ◄───────────────  │                  │  ◄───────────────  (Mac/VPS)
 └─────────────┘                    └──────────────────┘
 
 ┌─────────────┐                    ┌──────────────────┐
-│  PWA:       │   POST /prompt     │  VoiceClaude     │   POST TARGET_URL
+│  PWA:       │   POST /prompt     │  VoxGate     │   POST TARGET_URL
 │  "Dokbot"   │  ───────────────►  │  Container :8002 │  ───────────────►  Dokbot
 │  (blue)     │  ◄───────────────  │                  │  ◄───────────────  (anywhere)
 └─────────────┘                    └──────────────────┘
@@ -32,7 +32,7 @@ Everything is configured via environment variables. One instance = one target.
 
 | Variable | Description | Default |
 |---|---|---|
-| `INSTANCE_NAME` | Name shown in the UI header | `VoiceClaude` |
+| `INSTANCE_NAME` | Name shown in the UI header | `VoxGate` |
 | `INSTANCE_COLOR` | Accent color (hex) | `#c8ff00` |
 | `SPEECH_LANG` | Web Speech API language | `de-CH` |
 | `TARGET_URL` | Backend URL to forward voice text to | *(required)* |
@@ -63,7 +63,7 @@ Edit `docker-compose.yml` to add more instances or change targets.
 
 ## Target Backend Contract
 
-VoiceClaude sends a POST request to `TARGET_URL` with:
+VoxGate sends a POST request to `TARGET_URL` with:
 
 ```json
 POST <TARGET_URL>
@@ -73,7 +73,7 @@ Authorization: Bearer <TARGET_TOKEN>  (if set)
 {"text": "the transcribed voice input"}
 ```
 
-The target must return JSON. VoiceClaude displays the `response` or `text` field:
+The target must return JSON. VoxGate displays the `response` or `text` field:
 
 ```json
 {"response": "answer from the backend"}
@@ -105,7 +105,7 @@ dokbot.example.com {
 ## File Structure
 
 ```
-voiceclaude/
+voxgate/
 ├── server.py              # FastAPI gateway (forwards to TARGET_URL)
 ├── pwa/
 │   ├── index.html         # 1-click voice UI
