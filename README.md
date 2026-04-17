@@ -7,11 +7,11 @@ Speech input on Pixel → Server receives text → Claude Code CLI processes →
 ## Architecture
 
 ```
-┌─────────────┐       HTTPS/POST        ┌─────────────────┐
-│  PWA on     │  ──────────────────────► │  FastAPI Server  │
-│  Android    │  ◄────────────────────── │  (VPS / local)   │
-│  (Chrome)   │       JSON Response      │                  │
-└─────────────┘                          │  → claude -p "…" │
+┌─────────────┐       HTTPS/POST         ┌─────────────────┐
+│  PWA on     │  ──────────────────────► │  FastAPI Server │
+│  Android    │  ◄────────────────────── │  (VPS / local)  │
+│  (Chrome)   │       JSON Response      │                 │
+└─────────────┘                          │  → claude -p "..│
                                          └─────────────────┘
 ```
 
