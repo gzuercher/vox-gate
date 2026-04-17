@@ -1,11 +1,12 @@
-from fastapi import FastAPI, HTTPException, Depends
+import os
+import subprocess
+import sys
+
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-import subprocess
-import os
-import sys
 
 app = FastAPI()
 
