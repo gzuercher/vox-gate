@@ -1,15 +1,15 @@
 # VoiceClaude
 
-Sprachgesteuertes Interface für Claude Code – als PWA auf dem Handy installierbar.
+Voice-controlled interface for Claude Code – installable as a PWA on mobile.
 
-Spracheingabe auf dem Pixel → Server empfängt Text → Claude Code CLI verarbeitet → Antwort zurück aufs Handy.
+Speech input on Pixel → Server receives text → Claude Code CLI processes → Response back to phone.
 
-## Architektur
+## Architecture
 
 ```
 ┌─────────────┐       HTTPS/POST        ┌─────────────────┐
-│  PWA auf    │  ──────────────────────► │  FastAPI Server  │
-│  Android    │  ◄────────────────────── │  (VPS / lokal)   │
+│  PWA on     │  ──────────────────────► │  FastAPI Server  │
+│  Android    │  ◄────────────────────── │  (VPS / local)   │
 │  (Chrome)   │       JSON Response      │                  │
 └─────────────┘                          │  → claude -p "…" │
                                          └─────────────────┘
@@ -17,25 +17,25 @@ Spracheingabe auf dem Pixel → Server empfängt Text → Claude Code CLI verarb
 
 ## Features
 
-- **Web Speech API** mit `de-CH` – kontinuierliche Aufnahme ohne Auto-Stop
-- **PWA** – installierbar auf dem Homescreen, Standalone-Modus
-- **Token-Auth** – optionaler Bearer Token für den API-Zugriff
-- **Minimales UI** – dunkles Theme, IBM Plex Mono, kein Overhead
+- **Web Speech API** with `de-CH` – continuous recording without auto-stop
+- **PWA** – installable on homescreen, standalone mode
+- **Token auth** – optional Bearer token for API access
+- **Minimal UI** – dark theme, IBM Plex Mono, zero overhead
 
-## Dateistruktur
+## File Structure
 
 ```
 voiceclaude/
-├── server.py          # FastAPI Backend, ruft claude CLI auf
+├── server.py          # FastAPI backend, invokes claude CLI
 ├── pwa/
-│   ├── index.html     # Frontend mit Speech Recognition
-│   ├── manifest.json  # PWA Manifest
+│   ├── index.html     # Frontend with Speech Recognition
+│   ├── manifest.json  # PWA manifest
 │   ├── sw.js          # Service Worker
-│   └── icon.svg       # App Icon
-└── .venv/             # Python Virtual Environment
+│   └── icon.svg       # App icon
+└── .venv/             # Python virtual environment
 ```
 
-## Setup (lokal)
+## Setup (local)
 
 ```bash
 python3 -m venv .venv
@@ -45,32 +45,32 @@ pip install fastapi uvicorn
 uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-Dann `http://localhost:8000` in Chrome öffnen. Web Speech API funktioniert auf localhost ohne HTTPS.
+Open `http://localhost:8000` in Chrome. Web Speech API works on localhost without HTTPS.
 
-## Setup (VPS mit HTTPS)
+## Setup (VPS with HTTPS)
 
-HTTPS ist Pflicht für die Web Speech API auf Android.
+HTTPS is required for the Web Speech API on Android.
 
 ```bash
-# 1. Server starten
-API_TOKEN=dein-geheimes-token uvicorn server:app --host 127.0.0.1 --port 8000
+# 1. Start server
+API_TOKEN=your-secret-token uvicorn server:app --host 127.0.0.1 --port 8000
 
-# 2. Caddy als Reverse Proxy (automatisches HTTPS)
+# 2. Caddy as reverse proxy (automatic HTTPS)
 # Caddyfile:
 # voice.example.com {
 #     reverse_proxy localhost:8000
 # }
 ```
 
-Auf dem Pixel: Chrome → `https://voice.example.com` → Dreipunkt-Menü → „Zum Startbildschirm hinzufügen".
+On Pixel: Chrome → `https://voice.example.com` → three-dot menu → "Add to Home screen".
 
-## Konfiguration
+## Configuration
 
-| Variable | Beschreibung | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `API_TOKEN` | Bearer Token für `/prompt` Endpoint | leer (kein Auth) |
+| `API_TOKEN` | Bearer token for `/prompt` endpoint | empty (no auth) |
 
-Die Server-URL und der Token können auch direkt in der App unter Einstellungen (⚙) konfiguriert werden.
+Server URL and token can also be configured in the app under Settings (⚙).
 
 ## API
 
@@ -79,13 +79,17 @@ POST /prompt
 Content-Type: application/json
 Authorization: Bearer <token>  (optional)
 
-{"text": "Deine Anweisung an Claude"}
+{"text": "Your instruction for Claude"}
 
-→ {"response": "Antwort von Claude"}
+→ {"response": "Response from Claude"}
 ```
 
-## Voraussetzungen
+## Requirements
 
 - Python 3.10+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installiert und eingeloggt
-- Chrome (Desktop oder Android) für Web Speech API
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- Chrome (desktop or Android) for Web Speech API
+
+## License
+
+MIT

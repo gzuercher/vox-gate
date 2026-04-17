@@ -1,6 +1,6 @@
 # VoiceClaude Setup
 
-## Struktur auf dem VPS
+## Directory structure on VPS
 ```
 /opt/voiceclaude/
   server.py
@@ -11,28 +11,28 @@
     icon.svg
 ```
 
-## 1. Abhängigkeiten
+## 1. Dependencies
 ```bash
 pip install fastapi uvicorn python-multipart
 ```
 
-Claude Code muss installiert und eingeloggt sein:
+Claude Code must be installed and authenticated:
 ```bash
 npm install -g @anthropic-ai/claude-code
 claude login
 ```
 
-## 2. Starten
+## 2. Start
 ```bash
-export API_TOKEN="dein-sicheres-token"
+export API_TOKEN="your-secure-token"
 uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-## 3. HTTPS (Pflicht für Web Speech API)
-Mit Caddy (einfachste Option):
+## 3. HTTPS (required for Web Speech API)
+Using Caddy (simplest option):
 ```
 # Caddyfile
-dein-server.example.com {
+your-server.example.com {
   reverse_proxy localhost:8000
 }
 ```
@@ -41,7 +41,7 @@ apt install caddy
 caddy run
 ```
 
-## 4. Als Service einrichten
+## 4. Set up as systemd service
 ```ini
 # /etc/systemd/system/voiceclaude.service
 [Unit]
@@ -50,7 +50,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/opt/voiceclaude
-Environment="API_TOKEN=dein-sicheres-token"
+Environment="API_TOKEN=your-secure-token"
 ExecStart=uvicorn server:app --host 127.0.0.1 --port 8000
 Restart=always
 
@@ -61,11 +61,11 @@ WantedBy=multi-user.target
 systemctl enable --now voiceclaude
 ```
 
-## 5. PWA auf Pixel installieren
-1. Chrome öffnen → https://dein-server.example.com
-2. Drei Punkte → "Zum Startbildschirm hinzufügen"
-3. Fertig
+## 5. Install PWA on Pixel
+1. Open Chrome → https://your-server.example.com
+2. Three-dot menu → "Add to Home screen"
+3. Done
 
-## Einstellungen in der App
-- Server URL: `https://dein-server.example.com/prompt`
-- API Token: dein gesetztes Token
+## App settings
+- Server URL: `https://your-server.example.com/prompt`
+- API Token: the token you configured

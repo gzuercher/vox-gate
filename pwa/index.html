@@ -283,6 +283,23 @@
       cursor: pointer;
     }
 
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
@@ -311,7 +328,7 @@
   </div>
 </header>
 
-<div class="messages" id="messages">
+<main class="messages" id="messages">
   <div class="empty-state" id="emptyState">
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.4">
       <rect x="9" y="2" width="6" height="13" rx="3"/>
@@ -319,7 +336,7 @@
     </svg>
     <span>Mikrofon drücken und sprechen</span>
   </div>
-</div>
+</main>
 
 <footer>
   <div class="transcript-box" id="transcriptBox">Bereit...</div>
@@ -345,7 +362,9 @@
 <div class="settings-panel" id="settingsPanel" onclick="closeSettingsOutside(event)">
   <div class="settings-inner">
     <span class="settings-title">Einstellungen</span>
-    <input type="url" id="serverUrl" placeholder="https://dein-server.com/prompt" autocomplete="off" spellcheck="false">
+    <label class="sr-only" for="serverUrl">Server URL</label>
+    <input type="url" id="serverUrl" placeholder="https://your-server.com/prompt" autocomplete="off" spellcheck="false">
+    <label class="sr-only" for="apiToken">API Token</label>
     <input type="password" id="apiToken" placeholder="API Token (optional)" autocomplete="off">
     <button class="settings-save" onclick="saveSettings()">Speichern</button>
   </div>

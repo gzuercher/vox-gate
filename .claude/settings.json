@@ -7,15 +7,11 @@
       "Edit",
       "Glob",
       "Grep",
-      "Bash(pnpm run *)",
-      "Bash(pnpm install)",
-      "Bash(pnpm add *)",
-      "Bash(pnpm remove *)",
-      "Bash(composer install)",
-      "Bash(composer require *)",
-      "Bash(php artisan *)",
-      "Bash(npm run *)",
-      "Bash(npx *)",
+      "Bash(pip install *)",
+      "Bash(pip freeze)",
+      "Bash(python3 *)",
+      "Bash(uvicorn *)",
+      "Bash(curl *)",
       "Bash(git status)",
       "Bash(git diff *)",
       "Bash(git log *)",
@@ -27,7 +23,8 @@
       "Bash(find *)",
       "Bash(head *)",
       "Bash(tail *)",
-      "Bash(wc *)"
+      "Bash(wc *)",
+      "Bash(lsof *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -44,19 +41,6 @@
       "Read(./.env.*)",
       "Read(**/.env)",
       "Read(**/.env.*)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/post-edit.sh"
-          }
-        ]
-      }
     ]
   }
 }

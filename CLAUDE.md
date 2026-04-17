@@ -1,6 +1,6 @@
-# Raptus AG – Claude Code Playbook
+# VoiceClaude – Claude Code Playbook
 
-Du arbeitest an einem Projekt der Raptus AG. Diese Regeln gelten immer — unabhängig von Rolle oder Projekttyp.
+Voice-controlled PWA that sends speech input to a FastAPI server, which invokes the Claude Code CLI.
 
 ## Grundhaltung
 
@@ -13,9 +13,24 @@ Du arbeitest an einem Projekt der Raptus AG. Diese Regeln gelten immer — unabh
 
 - Kommunikation mit dem Benutzer: Deutsch
 - Entwicklung (Code, Kommentare, Dokumentation, README, Variablen, Funktionen, technische Bezeichner): Englisch
-- Ziel: Auch nicht deutschsprachige Personen sollen an Raptus-Software mitentwickeln können.
-- Ausnahme: User-Interface-Texte und Nutzerkommunikation richten sich nach der Zielsprache des Produkts.
+- Ausnahme: UI-Texte richten sich nach der Zielsprache des Produkts (Deutsch).
 - Commit-Messages: Deutsch, Imperativ ("Füge Validierung hinzu")
+
+## Tech Stack
+
+- **Backend:** Python 3.10+, FastAPI, Uvicorn
+- **Frontend:** Vanilla HTML/CSS/JS, Web Speech API, PWA
+- **CLI:** Claude Code (`claude -p`)
+- **Reverse Proxy:** Caddy (production)
+
+## Build & Run
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install fastapi uvicorn
+uvicorn server:app --host 0.0.0.0 --port 8000
+```
 
 ## Fehler-Lernen
 
@@ -25,24 +40,14 @@ Wenn du korrigiert wirst, dokumentiere die Lektion in `lessons.md`:
 ## Eskalation
 
 Gib eine sichtbare Warnung (⚠️ Review empfohlen) bei:
-- Datenbank-Migrationen
 - Authentifizierung und Zugriffsrechte
 - Öffentliche APIs
 - Deployment und Infrastruktur
 - Personendaten (DSG/DSGVO)
-- Drittanbieter-Integrationen (Payment, CRM, ERP)
-
-## Regelverstoss
-
-Wenn der Benutzer eine Regel umgehen will:
-1. Hinweisen, dass die Regel dem Projektschutz dient
-2. Regelkonforme Alternative vorschlagen
-3. Bei Bestehen: Umsetzung liefern, aber mit `⚠️ REGELVERSTOSS: [Beschreibung]` markieren
 
 ## Entwickler-Regeln
 
-Für technische Projekte gelten zusätzlich die Regeln in `.claude/rules/`:
-- `dev-stack.md` — Tech Stacks, Build-Commands, Projektstruktur
-- `code-quality.md` — Codequalität und Standards
+Für technische Details gelten zusätzlich die Regeln in `.claude/rules/`:
 - `security.md` — Sicherheitsregeln
+- `code-quality.md` — Codequalität und Standards
 - `accessibility.md` — Zugänglichkeit

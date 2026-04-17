@@ -1,46 +1,30 @@
-# Contributing – Claude Code bei Raptus
+# Contributing
 
-## Erste Schritte
+## Getting started
 
-1. Repo klonen oder Template verwenden
-2. `claude` im Projektverzeichnis starten
-3. `/help` zeigt verfügbare Commands
+1. Clone the repo
+2. Run `claude` in the project directory
+3. `/help` shows available commands
 
-## Verfügbare Commands
+## Available commands
 
-- `/commit-push-pr` — Git-Workflow automatisieren
-- `/review` — Code Review des aktuellen Branches
-- `/build-and-test` — Build und Tests laufen lassen
+- `/commit-push-pr` — Automate git workflow
+- `/review` — Code review of current branch
+- `/build-and-test` — Run build and tests
 
-## Wenn Claude einen Fehler macht
+## When Claude makes a mistake
 
-1. **Sofort korrigieren.** Nicht durchlaufen lassen.
-2. **Lektion dokumentieren:** Sage Claude: "Dokumentiere diese Lektion in lessons.md"
-3. **Im PR vermerken:** Wenn es ein wiederkehrendes Problem ist, CLAUDE.md oder eine Rule anpassen
+1. **Correct immediately.** Don't let it slide.
+2. **Document the lesson:** Tell Claude: "Document this lesson in lessons.md"
+3. **Note in PR:** If it's a recurring issue, update CLAUDE.md or a rule
 
-## Code Review mit Claude
+## Extending rules
 
-Bei Pull Reviews kannst du `@.claude` taggen (braucht die Claude Code GitHub Action). Claude kann dann:
-- Fehler in der CLAUDE.md ergänzen
-- Lektionen in lessons.md eintragen
-- Direkt Verbesserungen vorschlagen
+1. Create a `.md` file in `.claude/rules/`
+2. Set `globs` in frontmatter to relevant file types
+3. Keep the rule short and specific
+4. Create a PR
 
-## Rules erweitern
+## Personal settings
 
-Wenn du eine neue Regel brauchst:
-1. Erstelle eine `.md`-Datei in `.claude/rules/`
-2. Setze `globs` im Frontmatter auf die relevanten Dateitypen
-3. Halte die Regel kurz und konkret
-4. Erstelle einen PR
-
-## Persönliche Einstellungen
-
-Für persönliche Anpassungen: `.claude/settings.local.json` (git-ignored).
-Diese Datei überschreibt Team-Einstellungen lokal.
-
-## Wichtig
-
-- **CLAUDE.md schlank halten.** Nur was jede Session braucht.
-- **Rules für Spezifisches.** Sicherheit, Qualität, A11y sind ausgelagert.
-- **Hooks für Determinismus.** Was immer passieren muss (Formatting), gehört in Hooks.
-- **lessons.md pflegen.** Jeder Fehler, der dokumentiert wird, spart dem Team Zeit.
+For personal overrides: `.claude/settings.local.json` (git-ignored).
