@@ -20,6 +20,24 @@ SPEECH_LANG = os.environ.get("SPEECH_LANG", "de-CH")
 MAX_PROMPT_LENGTH = int(os.environ.get("MAX_PROMPT_LENGTH", "4000"))
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "")
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "120"))
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+SYSTEM_PROMPT = os.environ.get(
+    "SYSTEM_PROMPT", "You are a helpful assistant. Answer concisely."
+)
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
+SESSION_MAX_MESSAGES = 20
+
+_sessions: dict[str, list[dict]] = {}
+_anthropic_client = None
+
+
+def _get_anthropic_client():
+    global _anthropic_client
+    if _anthropic_client is None:
+        from anthropic import AsyncAnthropic
+
+        _anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    return _anthropic_client
 
 if not API_TOKEN:
     print(
@@ -56,6 +74,11 @@ class PromptRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
 
 
+class ClaudeRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
+    session_id: str = Field(..., min_length=1, max_length=128)
+
+
 @app.get("/config")
 async def get_config():
     return {
@@ -90,6 +113,38 @@ async def prompt(req: PromptRequest, _=Depends(verify_token)):
         data = {"response": res.text.strip()}
 
     return JSONResponse(content=data)
+
+
+@app.post("/claude")
+async def claude(req: ClaudeRequest, _=Depends(verify_token)):
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="No Anthropic API key configured")
+
+    history = _sessions.setdefault(req.session_id, [])
+    history.append({"role": "user", "content": req.text})
+
+    try:
+        client = _get_anthropic_client()
+        message = await client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=history,
+        )
+    except Exception:
+        history.pop()
+        raise HTTPException(status_code=502, detail="Anthropic API error")
+
+    reply = "".join(
+        block.text for block in message.content if getattr(block, "type", None) == "text"
+    )
+
+    history.append({"role": "assistant", "content": reply})
+
+    while len(history) > SESSION_MAX_MESSAGES:
+        del history[0:2]
+
+    return {"response": reply}
 
 
 app.mount("/", StaticFiles(directory="pwa", html=True), name="pwa")

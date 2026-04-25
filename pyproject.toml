@@ -6,6 +6,7 @@ dependencies = [
     "fastapi>=0.100",
     "uvicorn>=0.20",
     "httpx>=0.25",
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]

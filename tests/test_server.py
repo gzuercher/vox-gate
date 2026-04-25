@@ -131,6 +131,128 @@ class TestAuth:
         assert res.status_code == 401
 
 
+class _FakeTextBlock:
+    type = "text"
+
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeMessage:
+    def __init__(self, text):
+        self.content = [_FakeTextBlock(text)]
+
+
+def _mock_anthropic(reply="Hi there", raise_error=False):
+    if raise_error:
+        create = AsyncMock(side_effect=RuntimeError("boom"))
+    else:
+        create = AsyncMock(return_value=_FakeMessage(reply))
+    fake_client = type("C", (), {})()
+    fake_client.messages = type("M", (), {"create": create})()
+    return fake_client, create
+
+
+class TestClaudeEndpoint:
+    def test_no_api_key_returns_503(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+        client = _reload_app()
+        res = client.post("/claude", json={"text": "hi", "session_id": "s1"})
+        assert res.status_code == 503
+
+    def test_returns_assistant_reply(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        fake, _ = _mock_anthropic("Hello!")
+        server._anthropic_client = fake
+        res = client.post("/claude", json={"text": "hi", "session_id": "s1"})
+        assert res.status_code == 200
+        assert res.json()["response"] == "Hello!"
+
+    def test_session_history_persists(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        snapshots = []
+
+        async def fake_create(**kwargs):
+            snapshots.append([dict(m) for m in kwargs["messages"]])
+            return _FakeMessage("reply")
+
+        fake = type("C", (), {})()
+        msgs_obj = type("M", (), {})()
+        msgs_obj.create = fake_create
+        fake.messages = msgs_obj
+        server._anthropic_client = fake
+        client.post("/claude", json={"text": "first", "session_id": "abc"})
+        client.post("/claude", json={"text": "second", "session_id": "abc"})
+        msgs = snapshots[1]
+        assert msgs[0] == {"role": "user", "content": "first"}
+        assert msgs[1] == {"role": "assistant", "content": "reply"}
+        assert msgs[2] == {"role": "user", "content": "second"}
+
+    def test_history_truncated_to_max(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        fake, _ = _mock_anthropic("ok")
+        server._anthropic_client = fake
+        for i in range(15):
+            res = client.post(
+                "/claude", json={"text": f"m{i}", "session_id": "trunc"}
+            )
+            assert res.status_code == 200
+        assert len(server._sessions["trunc"]) <= server.SESSION_MAX_MESSAGES
+
+    def test_sessions_isolated(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        snapshots = []
+
+        async def fake_create(**kwargs):
+            snapshots.append([dict(m) for m in kwargs["messages"]])
+            return _FakeMessage("ok")
+
+        fake = type("C", (), {})()
+        msgs_obj = type("M", (), {})()
+        msgs_obj.create = fake_create
+        fake.messages = msgs_obj
+        server._anthropic_client = fake
+        client.post("/claude", json={"text": "a-msg", "session_id": "A"})
+        client.post("/claude", json={"text": "b-msg", "session_id": "B"})
+        assert snapshots[1] == [{"role": "user", "content": "b-msg"}]
+
+    def test_api_error_rolls_back_history(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        fake, _ = _mock_anthropic(raise_error=True)
+        server._anthropic_client = fake
+        res = client.post("/claude", json={"text": "hi", "session_id": "err"})
+        assert res.status_code == 502
+        assert server._sessions.get("err", []) == []
+
+    def test_missing_session_id_rejected(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        res = client.post("/claude", json={"text": "hi"})
+        assert res.status_code == 422
+
+    def test_auth_required(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "secret123")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        res = client.post("/claude", json={"text": "hi", "session_id": "s"})
+        assert res.status_code == 401
+
+
 class TestStaticFiles:
     def test_index_html_served(self):
         client = _reload_app()

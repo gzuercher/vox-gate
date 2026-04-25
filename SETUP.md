@@ -1,26 +1,52 @@
 # VoxGate Setup
 
-## Option A: Docker (recommended)
+Ausführliche Anleitung für System-Betreiber. Für die Übersicht siehe [`README.md`](README.md).
 
-### 1. Clone and configure
+## Variante A: Docker (empfohlen)
+
+### 1. Klonen und konfigurieren
+
 ```bash
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate
 cp .env.example .env
-# Edit .env with your tokens and target URLs
+# .env editieren — siehe nächster Abschnitt
 ```
 
-### 2. Start
+### 2. `.env` ausfüllen
+
+Mindestens **eines** der folgenden Backends konfigurieren:
+
+**Direct-Claude (einfachster Weg):**
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+SYSTEM_PROMPT=Du bist ein hilfreicher Assistent. Antworte knapp.
+API_TOKEN_CLAUDE=ein-zufaelliger-langer-string
+```
+
+**Eigenes Backend per Forwarding:**
+```bash
+TARGET_URL=http://host.docker.internal:9000/prompt
+TARGET_TOKEN=optional-bearer-token
+API_TOKEN_CLAUDE=ein-zufaelliger-langer-string
+```
+
+> ⚠️ **Wichtig:** Setze `API_TOKEN_*` immer, sobald der Server von aussen erreichbar ist. Ohne Token kann jeder Anfragen stellen — bei aktivem `/claude` zahlst du die Anthropic-Rechnung für Fremde.
+
+### 3. Starten
+
 ```bash
 docker compose up -d
 ```
 
-Default instances:
+Default-Instanzen:
 - **Claude** → http://localhost:8001
 - **Dokbot** → http://localhost:8002
 
-### 3. Add more instances
-Add a new service to `docker-compose.yml`:
+### 4. Weitere Instanzen
+
+In `docker-compose.yml` einen Service ergänzen:
+
 ```yaml
 notes:
   build: .
@@ -29,29 +55,37 @@ notes:
   environment:
     - INSTANCE_NAME=Notizen
     - INSTANCE_COLOR=#ff6b6b
-    - TARGET_URL=http://host.docker.internal:9002/notes
+    - SPEECH_LANG=de-CH
+    - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    - SYSTEM_PROMPT=Du bist ein Notiz-Assistent.
     - API_TOKEN=${API_TOKEN_NOTES:-}
+    - ALLOWED_ORIGIN=https://notizen.example.com
 ```
 
-## Option B: Direct (without Docker)
+## Variante B: Direkt (ohne Docker)
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install fastapi uvicorn httpx
+pip install -e ".[dev]"
+# Installiert fastapi, uvicorn, httpx, anthropic plus Dev-Tools
 
 export INSTANCE_NAME="Claude"
 export INSTANCE_COLOR="#c8ff00"
-export TARGET_URL="http://localhost:9000/prompt"
-export API_TOKEN="your-secure-token"          # required for production!
+export ANTHROPIC_API_KEY="sk-ant-..."
+export API_TOKEN="dein-langer-zufaelliger-token"
+export ALLOWED_ORIGIN="https://claude.example.com"
+
 uvicorn server:app --host 127.0.0.1 --port 8000
+# WICHTIG: kein --workers N — siehe Skalierungshinweis in README
 ```
 
-> **Warning:** Never run without `API_TOKEN` on a public server.
+> ⚠️ **Niemals** ohne `API_TOKEN` auf einem öffentlich erreichbaren Server betreiben.
 
-## HTTPS (required for Web Speech API on Android)
+## HTTPS (Pflicht für Web Speech API auf Android)
 
-Using Caddy (automatic HTTPS):
+Caddy mit automatischen Zertifikaten:
+
 ```
 # Caddyfile
 claude.example.com {
@@ -61,12 +95,13 @@ dokbot.example.com {
   reverse_proxy localhost:8002
 }
 ```
+
 ```bash
 apt install caddy
-caddy run
+caddy run --config /etc/caddy/Caddyfile
 ```
 
-## Systemd (per instance)
+## Systemd (eine Unit pro Instanz)
 
 ```ini
 # /etc/systemd/system/voxgate-claude.service
@@ -78,38 +113,47 @@ After=network.target
 WorkingDirectory=/opt/voxgate
 Environment="INSTANCE_NAME=Claude"
 Environment="INSTANCE_COLOR=#c8ff00"
-Environment="TARGET_URL=http://localhost:9000/prompt"
-Environment="API_TOKEN=your-secure-token"
+Environment="SPEECH_LANG=de-CH"
+Environment="ANTHROPIC_API_KEY=sk-ant-..."
+Environment="SYSTEM_PROMPT=Du bist ein hilfreicher Assistent. Antworte knapp."
+Environment="API_TOKEN=langer-zufaelliger-token"
 Environment="ALLOWED_ORIGIN=https://claude.example.com"
-ExecStart=uvicorn server:app --host 127.0.0.1 --port 8001
+# Kein --workers N — Sessions werden In-Memory gehalten (siehe README "Skalierung")
+ExecStart=/opt/voxgate/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-## Install PWA on Pixel
+```bash
+systemctl daemon-reload
+systemctl enable --now voxgate-claude
+journalctl -u voxgate-claude -f
+```
 
-1. Open Chrome → https://claude.example.com
-2. Three-dot menu → "Add to Home screen"
-3. Repeat for each instance (different URL = different PWA)
+## PWA auf dem Pixel installieren
 
-## Target Backend Contract
+1. Chrome öffnen → https://claude.example.com
+2. Drei-Punkte-Menü → "Zum Startbildschirm hinzufügen"
+3. Für jede Instanz wiederholen — verschiedene URL = verschiedene PWA mit eigener Farbe und eigenem Icon.
 
-Any HTTP service that accepts this request works as a target:
+## Eigenes Backend für `/prompt`
+
+Jeder HTTP-Service, der diesen Vertrag erfüllt, funktioniert als Ziel:
 
 ```
 POST <TARGET_URL>
 Content-Type: application/json
-Authorization: Bearer <TARGET_TOKEN>
+Authorization: Bearer <TARGET_TOKEN>     # falls TARGET_TOKEN gesetzt
 
 {"text": "voice input text"}
-→ {"response": "answer"}
+→ {"response": "Antwort"}
 ```
 
-### Example: Claude Code wrapper
+### Beispiel: Claude-Code-Wrapper
 
-A minimal target that runs Claude Code CLI:
+Ein minimales Backend, das die Claude-Code-CLI aufruft:
 
 ```python
 from fastapi import FastAPI
@@ -130,4 +174,12 @@ async def prompt(req: Req):
     return {"response": result.stdout.strip()}
 ```
 
-This runs on the machine where Claude Code is installed (e.g. your Mac).
+Läuft auf der Maschine, auf der Claude Code installiert ist (z.B. dein Mac). VoxGate läuft auf dem Server und leitet weiter.
+
+## Wartung & Betrieb
+
+- **Logs:** `docker compose logs -f` bzw. `journalctl -u voxgate-* -f`
+- **Update:** `git pull && docker compose build && docker compose up -d`
+- **Sessions:** werden im Speicher gehalten, gehen beim Neustart verloren. Das ist beabsichtigt für eine leichtgewichtige Installation.
+- **Anthropic-Kosten überwachen:** Dashboard auf console.anthropic.com nutzen, ggf. Spending Limits setzen.
+- **Single-Worker-Constraint beachten:** Siehe Abschnitt "Skalierung" in der `README.md`.
