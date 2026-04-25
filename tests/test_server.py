@@ -397,3 +397,221 @@ class TestTimingSafeAuth:
             "/prompt", json={"text": "hi"}, headers={"Authorization": "Bearer "}
         )
         assert res.status_code == 401
+
+
+class TestConfigEndpointFields:
+    def test_returns_max_length(self):
+        client = _reload_app()
+        data = client.get("/config").json()
+        assert data["maxLength"] == 4000
+
+    def test_max_length_overridable(self, monkeypatch):
+        monkeypatch.setenv("MAX_PROMPT_LENGTH", "100")
+        client = _reload_app()
+        assert client.get("/config").json()["maxLength"] == 100
+
+
+class TestPromptBoundaries:
+    def test_exactly_max_length_accepted(self):
+        client = _reload_app()
+        with _mock_target():
+            res = client.post("/prompt", json={"text": "a" * 4000})
+        assert res.status_code == 200
+
+    def test_one_over_max_rejected(self):
+        client = _reload_app()
+        res = client.post("/prompt", json={"text": "a" * 4001})
+        assert res.status_code == 422
+
+
+class TestStaticAssets:
+    @pytest.mark.parametrize(
+        "path,fragment",
+        [
+            ("/app.js", "instanceConfig"),
+            ("/styles.css", ":root"),
+            ("/manifest.json", "name"),
+            ("/sw.js", ""),
+            ("/icon.svg", "<svg"),
+        ],
+    )
+    def test_pwa_asset_served(self, path, fragment):
+        client = _reload_app()
+        res = client.get(path)
+        assert res.status_code == 200
+        if fragment:
+            assert fragment in res.text
+
+
+class TestCORS:
+    def test_allowed_origin_passes_through(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_ORIGIN", "https://allowed.example.com")
+        client = _reload_app()
+        res = client.options(
+            "/config",
+            headers={
+                "Origin": "https://allowed.example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert res.headers.get("access-control-allow-origin") == "https://allowed.example.com"
+
+    def test_other_origin_blocked(self, monkeypatch):
+        monkeypatch.setenv("ALLOWED_ORIGIN", "https://allowed.example.com")
+        client = _reload_app()
+        res = client.options(
+            "/config",
+            headers={
+                "Origin": "https://attacker.example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert res.headers.get("access-control-allow-origin") != "https://attacker.example.com"
+
+
+class TestProxyHeaderTrust:
+    def test_xff_ignored_by_default(self, monkeypatch):
+        monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "2")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        fake, _ = _mock_anthropic("ok")
+        server._anthropic_client = fake
+        for xff in ["1.1.1.1", "2.2.2.2", "3.3.3.3"]:
+            client.post(
+                "/claude",
+                json={"text": "hi", "session_id": "xfftest1"},
+                headers={"X-Forwarded-For": xff},
+            )
+        res = client.post(
+            "/claude",
+            json={"text": "hi", "session_id": "xfftest1"},
+            headers={"X-Forwarded-For": "4.4.4.4"},
+        )
+        assert res.status_code == 429
+
+    def test_xff_used_when_trusted(self, monkeypatch):
+        monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "2")
+        monkeypatch.setenv("TRUST_PROXY_HEADERS", "1")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        fake, _ = _mock_anthropic("ok")
+        server._anthropic_client = fake
+        for xff in ["1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4"]:
+            res = client.post(
+                "/claude",
+                json={"text": "hi", "session_id": "xfftest2"},
+                headers={"X-Forwarded-For": xff},
+            )
+            assert res.status_code == 200
+
+
+class TestRateLimitIsolation:
+    def test_static_assets_not_rate_limited(self, monkeypatch):
+        monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "2")
+        client = _reload_app()
+        for _ in range(10):
+            assert client.get("/config").status_code == 200
+
+
+class TestAnthropicResponseHandling:
+    def test_ignores_non_text_content_blocks(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        class ToolBlock:
+            type = "tool_use"
+
+        class TextBlock:
+            type = "text"
+            text = "real reply"
+
+        msg = type("M", (), {"content": [ToolBlock(), TextBlock()]})()
+        fake = type("C", (), {})()
+        msgs_obj = type("M2", (), {})()
+        msgs_obj.create = AsyncMock(return_value=msg)
+        fake.messages = msgs_obj
+        server._anthropic_client = fake
+        res = client.post(
+            "/claude", json={"text": "hi", "session_id": "tooltest1"}
+        )
+        assert res.status_code == 200
+        assert res.json()["response"] == "real reply"
+
+    def test_empty_content_yields_empty_string(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        msg = type("M", (), {"content": []})()
+        fake = type("C", (), {})()
+        msgs_obj = type("M2", (), {})()
+        msgs_obj.create = AsyncMock(return_value=msg)
+        fake.messages = msgs_obj
+        server._anthropic_client = fake
+        res = client.post(
+            "/claude", json={"text": "hi", "session_id": "emptyrep1"}
+        )
+        assert res.status_code == 200
+        assert res.json()["response"] == ""
+
+
+class TestHistoryTruncationKeepsPairs:
+    def test_trimmed_history_starts_with_user(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
+        client = _reload_app()
+        import server
+
+        fake, _ = _mock_anthropic("a")
+        server._anthropic_client = fake
+        for i in range(15):
+            client.post(
+                "/claude", json={"text": f"m{i}", "session_id": "pairtest1"}
+            )
+        history = server._sessions["pairtest1"]["messages"]
+        assert history[0]["role"] == "user"
+        assert len(history) % 2 == 0
+
+
+class TestPromptForwardsTokenAndStripsResponse:
+    def test_target_token_added(self, monkeypatch):
+        monkeypatch.setenv("TARGET_TOKEN", "downstream-secret")
+        client = _reload_app()
+        captured = {}
+
+        def fake_post(url, json, headers):
+            captured["headers"] = headers
+            captured["json"] = json
+            return httpx.Response(200, json={"response": "ok"})
+
+        async def async_post(*args, **kwargs):
+            return fake_post(*args, **kwargs)
+
+        with patch("httpx.AsyncClient") as cm:
+            instance = AsyncMock()
+            instance.post = async_post
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=None)
+            cm.return_value = instance
+            res = client.post("/prompt", json={"text": "hi"})
+
+        assert res.status_code == 200
+        assert captured["headers"]["Authorization"] == "Bearer downstream-secret"
+        assert captured["json"] == {"text": "hi"}
+
+    def test_non_json_response_falls_back_to_text(self):
+        client = _reload_app()
+        mock_response = httpx.Response(200, text="plain text answer")
+        mock_post = AsyncMock(return_value=mock_response)
+        mock_client = AsyncMock()
+        mock_client.post = mock_post
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            res = client.post("/prompt", json={"text": "hi"})
+        assert res.status_code == 200
+        assert res.json()["response"] == "plain text answer"

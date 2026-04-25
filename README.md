@@ -1,182 +1,183 @@
 # VoxGate
 
-**Sprich mit Claude (oder einem anderen Chatbot) per Stimme — direkt von deinem Handy.**
+**Talk to Claude (or another chatbot) by voice — straight from your phone.**
 
-VoxGate ist eine kleine Web-App, die du wie eine native App auf deinem Smartphone-Homescreen installierst. Du tippst auf den Mikrofon-Knopf, sprichst, und bekommst die Antwort vorgelesen. Es funktioniert in Deutsch und Französisch (Schweiz) und kann mehrere Backends gleichzeitig bedienen.
+VoxGate is a small web app you install on your smartphone home screen like a native app. Tap the microphone button, speak, and hear the answer read back to you. It works in Swiss German and Swiss French and can serve multiple backends in parallel.
 
-## Was kann ich damit machen?
+## What can I do with it?
 
-- **Direkt mit Claude sprechen** — du gibst einen Anthropic-API-Key an und VoxGate spricht direkt mit Claude. Konversationen bleiben innerhalb einer Session erhalten.
-- **Eigene Backends ansprechen** — z.B. ein Skript auf deinem Mac, das Claude Code im Terminal ausführt. VoxGate leitet deine gesprochene Frage als HTTP-POST weiter.
-- **Mehrere Instanzen parallel betreiben** — z.B. eine grüne PWA "Claude" und eine blaue PWA "Dokbot", jede mit eigenem Symbol auf dem Homescreen.
+- **Talk to Claude directly** — provide an Anthropic API key and VoxGate calls Claude for you. Conversation context is preserved within a session.
+- **Talk to your own backend** — for example a script on your Mac that runs Claude Code in the terminal. VoxGate forwards your spoken prompt as an HTTP POST.
+- **Run multiple instances side by side** — e.g. a green PWA "Claude" and a blue PWA "Dokbot", each with its own icon on the home screen.
 
-Typische Anwendung: Du gehst spazieren, tippst auf das Claude-Icon, fragst "Wie spät ist es in Tokio?" und hörst die Antwort, ohne tippen zu müssen.
+Typical use case: you go for a walk, tap the Claude icon, ask "What time is it in Tokyo?", and hear the answer without having to type.
 
-## Bedienung (für Endbenutzer)
+## End-user guide
 
-Nach Installation als PWA auf dem Homescreen öffnest du die App und siehst:
+After installing the PWA on your home screen, open the app:
 
-| Element | Funktion |
+| Element | Function |
 |---|---|
-| **Mikrofon-Knopf (gross)** | Tippen = Aufnahme starten. Erneut tippen = senden. |
-| **Sprache (oben links)** | Zwischen `DE-CH` und `FR-CH` umschalten. Wahl wird gespeichert. |
-| **Lautsprecher (oben rechts)** | Sprachausgabe stumm/laut schalten. |
-| **Status-Punkt (oben rechts)** | Grün = bereit, blinkend = sendet, rot = Fehler. |
-| **Neues Gespräch (unten)** | Setzt den Konversationsverlauf zurück. |
+| **Microphone button (large)** | Tap to start recording. Tap again to send. |
+| **Language (top left)** | Switch between `DE-CH` and `FR-CH`. Choice is persisted. |
+| **Speaker (top right)** | Mute/unmute speech output. |
+| **Status dot (top right)** | Green = ready, blinking = sending, red = error. |
+| **New conversation (bottom)** | Reset the conversation history. |
 
-Antworten werden automatisch vorgelesen, sofern nicht stumm geschaltet. Tippst du während der Wiedergabe erneut auf das Mikro, wird die laufende Stimme abgebrochen.
+Replies are read aloud automatically unless muted. If you tap the mic again while audio is playing, the current speech is cancelled.
 
-### Voraussetzungen
+### Requirements
 
-- **Browser:** Chrome auf Android oder Desktop (Web Speech API). Safari/iOS hat eingeschränkte Unterstützung.
-- **Mikrofon-Berechtigung** beim ersten Start zulassen.
-- **HTTPS** ist auf Android Pflicht — siehe Setup unten.
+- **Browser:** Chrome on Android or desktop (Web Speech API). Safari/iOS support is limited.
+- **Microphone permission** must be granted on first launch.
+- **HTTPS** is mandatory on Android — see Setup below.
 
-## Architektur
+## Architecture
 
 ```
 ┌─────────────┐                             ┌──────────────────┐
 │  PWA        │     POST /claude            │                  │     Anthropic API
-│  (Smartphone│  ────────────────────────►  │  VoxGate Server  │  ────────────────────►  Claude
-│  Homescreen)│  ◄────────────────────────  │  (FastAPI)       │  ◄────────────────────  (claude-sonnet-4-5)
-│             │                             │                  │
+│  (phone     │  ────────────────────────►  │  VoxGate server  │  ────────────────────►  Claude
+│  home       │  ◄────────────────────────  │  (FastAPI)       │  ◄────────────────────  (claude-sonnet-4-5)
+│  screen)    │                             │                  │
 │             │     POST /prompt            │                  │     POST TARGET_URL
-│             │  ────────────────────────►  │                  │  ────────────────────►  Eigenes Backend
-│             │  ◄────────────────────────  │                  │  ◄────────────────────  (z.B. Mac mit Claude Code)
+│             │  ────────────────────────►  │                  │  ────────────────────►  Custom backend
+│             │  ◄────────────────────────  │                  │  ◄────────────────────  (e.g. Mac with Claude Code)
 └─────────────┘                             └──────────────────┘
 ```
 
-Der Server kennt zwei Endpoints:
+The server exposes two endpoints:
 
-- **`/claude`** — direkt zur Anthropic-API. Behält Konversationsverlauf pro Session. Nutzt `ANTHROPIC_API_KEY`.
-- **`/prompt`** — leitet an ein eigenes Backend weiter (`TARGET_URL`). Stateless. Hat den Originalzweck "Voice-Gateway für irgendeinen Chatbot".
+- **`/claude`** — calls the Anthropic API directly. Keeps conversation history per session. Uses `ANTHROPIC_API_KEY`.
+- **`/prompt`** — forwards to a custom backend (`TARGET_URL`). Stateless. Original use case: voice gateway for any chatbot service.
 
-Die PWA verwendet `/claude`. `/prompt` bleibt aus Kompatibilität erhalten und kann mit eigenen Clients genutzt werden.
+The PWA uses `/claude`. `/prompt` is kept for backwards compatibility and can be driven by your own clients.
 
-## Schnellstart (Docker, empfohlen)
+## Quick start (Docker, recommended)
 
 ```bash
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate
 cp .env.example .env
-# .env editieren — mindestens ANTHROPIC_API_KEY setzen
+# Edit .env — at minimum set ANTHROPIC_API_KEY and API_TOKEN
 docker compose up -d
 ```
 
-Default:
-- **Claude** auf `http://localhost:8001` (grün)
-- **Dokbot** auf `http://localhost:8002` (blau)
+Defaults:
+- **Claude** at `http://localhost:8001` (green)
+- **Dokbot** at `http://localhost:8002` (blue)
 
-## Konfiguration
+## Configuration
 
-Alles über Umgebungsvariablen.
+Everything is configured via environment variables.
 
-### Allgemein
+### General
 
-| Variable | Beschreibung | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `INSTANCE_NAME` | Name im UI-Header | `VoxGate` |
-| `INSTANCE_COLOR` | Akzentfarbe (Hex) | `#c8ff00` |
-| `SPEECH_LANG` | Default-Sprache (Web Speech API) | `de-CH` |
-| `MAX_PROMPT_LENGTH` | Maximale Textlänge | `4000` |
-| `REQUEST_TIMEOUT` | Timeout für ausgehende Requests (Sekunden) | `120` |
-| `API_TOKEN` | Bearer-Token für VoxGate selbst | *(leer, Server startet nicht falls Backend gesetzt)* |
-| `ALLOWED_ORIGIN` | Erlaubter CORS-Origin | *(leer, blockiert)* |
-| `RATE_LIMIT_PER_MINUTE` | Anfragen/Minute pro IP für `/claude` und `/prompt` | `30` |
-| `SESSION_TTL_SECONDS` | Lebensdauer einer Session ohne Aktivität | `1800` |
-| `MAX_SESSIONS` | Globales Cap an gleichzeitig gehaltenen Sessions | `1000` |
-| `TRUST_PROXY_HEADERS` | `1` falls VoxGate hinter Caddy/Nginx läuft (X-Forwarded-For) | `0` |
-| `VOXGATE_ALLOW_OPEN` | `1` umgeht den Fail-Loud-Start (nur lokale Entwicklung) | *(leer)* |
+| `INSTANCE_NAME` | Name shown in the UI header | `VoxGate` |
+| `INSTANCE_COLOR` | Accent color (hex) | `#c8ff00` |
+| `SPEECH_LANG` | Default language (Web Speech API) | `de-CH` |
+| `MAX_PROMPT_LENGTH` | Maximum text length | `4000` |
+| `REQUEST_TIMEOUT` | Outbound request timeout in seconds | `120` |
+| `API_TOKEN` | Bearer token for VoxGate itself | *(empty — server refuses to start if a backend is configured)* |
+| `ALLOWED_ORIGIN` | Allowed CORS origin | *(empty, blocked)* |
+| `RATE_LIMIT_PER_MINUTE` | Requests per minute per IP for `/claude` and `/prompt` | `30` |
+| `SESSION_TTL_SECONDS` | Lifetime of an idle session | `1800` |
+| `MAX_SESSIONS` | Global cap on concurrently held sessions | `1000` |
+| `TRUST_PROXY_HEADERS` | Set to `1` when running behind Caddy/Nginx (X-Forwarded-For) | `0` |
+| `VOXGATE_ALLOW_OPEN` | Set to `1` to bypass the fail-loud check (local development only) | *(empty)* |
 
-### Direct-Claude-Backend (`/claude`)
+### Direct Claude backend (`/claude`)
 
-| Variable | Beschreibung | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | API-Key von console.anthropic.com | *(leer, /claude liefert 503)* |
-| `SYSTEM_PROMPT` | System-Prompt für Claude | `You are a helpful assistant. Answer concisely.` |
-| `CLAUDE_MODEL` | Anthropic-Modell-ID | `claude-sonnet-4-5` |
+| `ANTHROPIC_API_KEY` | API key from console.anthropic.com | *(empty, /claude returns 503)* |
+| `SYSTEM_PROMPT` | System prompt for Claude | `You are a helpful assistant. Answer concisely.` |
+| `CLAUDE_MODEL` | Anthropic model ID | `claude-sonnet-4-5` |
 
-> ⚠️ **Kostenhinweis:** Anthropic-API-Aufrufe sind kostenpflichtig. Setze ein `API_TOKEN`, bevor du den Server öffentlich exponierst, sonst können Fremde auf deine Rechnung Anfragen stellen.
+> ⚠️ **Cost warning:** Anthropic API calls cost money. Set `API_TOKEN` before exposing the server publicly, otherwise strangers can run requests on your bill.
 
-### Forwarding-Backend (`/prompt`)
+### Forwarding backend (`/prompt`)
 
-| Variable | Beschreibung | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `TARGET_URL` | URL des eigenen Backends | *(leer, /prompt liefert 503)* |
-| `TARGET_TOKEN` | Bearer-Token für das Ziel-Backend | *(leer)* |
+| `TARGET_URL` | Custom backend URL | *(empty, /prompt returns 503)* |
+| `TARGET_TOKEN` | Bearer token for the target backend | *(empty)* |
 
-## API-Referenz
+## API reference
 
 ### `POST /claude`
 
-Direkter Anthropic-Aufruf mit Session-Verlauf.
+Direct Anthropic call with session history.
 
 ```json
 POST /claude
-Authorization: Bearer <API_TOKEN>     // falls API_TOKEN gesetzt
+Authorization: Bearer <API_TOKEN>     // if API_TOKEN is set
 Content-Type: application/json
 
 {
-  "text": "Wie spät ist es in Tokio?",
+  "text": "What time is it in Tokyo?",
   "session_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-Antwort:
+Response:
 
 ```json
-{ "response": "Aktuell ist es in Tokio …" }
+{ "response": "Currently it's …" }
 ```
 
-Fehler:
-- `401` — Token fehlt oder falsch
-- `422` — Validierung fehlgeschlagen (`text` zu lang/leer, `session_id` fehlt)
-- `502` — Anthropic-API-Fehler
-- `503` — `ANTHROPIC_API_KEY` nicht konfiguriert
+Errors:
+- `401` — token missing or wrong
+- `422` — validation failed (`text` too long/empty, `session_id` missing or malformed)
+- `429` — rate limit exceeded
+- `502` — Anthropic API error
+- `503` — `ANTHROPIC_API_KEY` not configured
 
-Verlauf: bis zu 20 Nachrichten pro `session_id` werden In-Memory gehalten; ältere werden paarweise verworfen.
+History: up to 20 messages per `session_id` are kept in memory; older ones are dropped in pairs.
 
 ### `POST /prompt`
 
-Reines Forwarding zu `TARGET_URL`.
+Pure forwarding to `TARGET_URL`.
 
 ```json
 POST /prompt
 Authorization: Bearer <API_TOKEN>
 Content-Type: application/json
 
-{ "text": "Hallo Backend" }
+{ "text": "Hello backend" }
 ```
 
-VoxGate sendet weiter:
+VoxGate forwards:
 
 ```json
 POST <TARGET_URL>
-Authorization: Bearer <TARGET_TOKEN>   // falls gesetzt
+Authorization: Bearer <TARGET_TOKEN>   // if set
 Content-Type: application/json
 
-{ "text": "Hallo Backend" }
+{ "text": "Hello backend" }
 ```
 
-Das Backend muss JSON mit Feld `response` (oder `text`) zurückgeben.
+The backend must return JSON with a `response` (or `text`) field.
 
 ### `GET /config`
 
-Liefert Instanz-Konfiguration für die PWA. Kein Auth.
+Returns instance configuration for the PWA. No auth.
 
 ```json
 { "name": "Claude", "color": "#c8ff00", "lang": "de-CH", "maxLength": 4000 }
 ```
 
-## PWA-Installation
+## PWA installation
 
-1. Chrome auf Android öffnen → `https://claude.example.com`
-2. Drei-Punkte-Menü → "Zum Startbildschirm hinzufügen"
-3. Für jede Instanz wiederholen — jedes Icon öffnet eine eigene PWA mit eigener Farbe.
+1. Open Chrome on Android → `https://claude.example.com`
+2. Three-dot menu → "Add to Home screen"
+3. Repeat for each instance — every icon opens its own PWA with its own color.
 
-## HTTPS (Pflicht für Android)
+## HTTPS (required on Android)
 
-Caddy als Reverse-Proxy mit automatischen Zertifikaten:
+Caddy as reverse proxy with automatic certificates:
 
 ```
 # Caddyfile
@@ -188,118 +189,121 @@ dokbot.example.com {
 }
 ```
 
-Details, Systemd-Units und ein Beispiel-Backend findest du in [`SETUP.md`](SETUP.md).
+Details, systemd units and an example backend live in [`SETUP.md`](SETUP.md).
 
 ## Troubleshooting
 
-| Problem | Ursache / Lösung |
+| Problem | Cause / fix |
 |---|---|
-| Mikrofon reagiert nicht | Berechtigung im Browser erteilen. Auf Android nur über HTTPS. |
-| Keine Sprachausgabe | Prüfe den Lautsprecher-Knopf (oben rechts). iOS unterstützt Web Speech eingeschränkt. |
-| `503` bei `/claude` | `ANTHROPIC_API_KEY` ist nicht gesetzt. |
-| `401` | `API_TOKEN` falsch oder fehlend. Token in `localStorage.apiToken` setzen oder Header senden. |
-| Konversation "vergisst" plötzlich | Wahrscheinlich mit mehreren Workern gestartet — siehe Skalierung. |
-| Funktioniert auf Safari/iOS nicht richtig | Web Speech API ist dort eingeschränkt; Chrome empfohlen. |
+| Microphone doesn't react | Grant permission in the browser. On Android only over HTTPS. |
+| No speech output | Check the speaker button (top right). iOS has limited Web Speech support. |
+| `503` on `/claude` | `ANTHROPIC_API_KEY` is not set. |
+| `401` | `API_TOKEN` missing or wrong. Set it in `localStorage.apiToken` or send the header. |
+| `429` | Rate limit hit. Wait or raise `RATE_LIMIT_PER_MINUTE`. |
+| Conversation suddenly "forgets" | Likely started with multiple workers — see Scaling. |
+| Doesn't work properly on Safari/iOS | Web Speech API is limited there; Chrome recommended. |
 
-## Sicherheit
+## Security
 
-VoxGate ist auf öffentlichen Betrieb ausgelegt. Eingebaute Schutzmassnahmen:
+VoxGate is designed for public deployment. Built-in protections:
 
-| Mechanismus | Wirkung |
+| Mechanism | Effect |
 |---|---|
-| **Fail-Loud-Start** | Server weigert sich zu starten, wenn ein Backend (`ANTHROPIC_API_KEY` oder `TARGET_URL`) konfiguriert ist, aber `API_TOKEN` leer. Nur `VOXGATE_ALLOW_OPEN=1` umgeht das (lokale Entwicklung). |
-| **Timing-sichere Token-Prüfung** | Bearer-Token-Vergleich via `secrets.compare_digest`. |
-| **Rate-Limiting** | `RATE_LIMIT_PER_MINUTE` Anfragen pro IP für `/claude` und `/prompt`. Default 30/min. |
-| **Session-TTL** | Sessions ohne Aktivität nach `SESSION_TTL_SECONDS` (default 30 Min) verworfen. |
-| **Session-Cap** | Max. `MAX_SESSIONS` parallele Sessions; älteste rausgeworfen. |
-| **`session_id`-Validierung** | Pattern `^[A-Za-z0-9_-]{8,128}$`. Steuerzeichen, Newlines etc. abgewiesen. |
-| **Security-Header** | `Content-Security-Policy` (strikt, kein Inline-Script), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (nur Mikrofon). |
-| **Audit-Log** | Jede Anfrage wird mit IP, Session-Präfix und Textlänge geloggt (kein Inhalt). 429 und Backend-Fehler ebenfalls. |
-| **CORS** | Default leer = blockiert. `ALLOWED_ORIGIN` explizit setzen. |
+| **Fail-loud start** | Server refuses to start when a backend (`ANTHROPIC_API_KEY` or `TARGET_URL`) is configured but `API_TOKEN` is empty. Only `VOXGATE_ALLOW_OPEN=1` bypasses (dev). |
+| **Timing-safe token check** | Bearer-token comparison via `secrets.compare_digest`. |
+| **Rate limiting** | `RATE_LIMIT_PER_MINUTE` requests per IP for `/claude` and `/prompt`. Default 30/min. |
+| **Session TTL** | Idle sessions are dropped after `SESSION_TTL_SECONDS` (default 30 min). |
+| **Session cap** | At most `MAX_SESSIONS` concurrent sessions; oldest evicted first. |
+| **`session_id` validation** | Pattern `^[A-Za-z0-9_-]{8,128}$`. Control characters, newlines etc. rejected. |
+| **Security headers** | Strict `Content-Security-Policy` (no inline script), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (microphone only). |
+| **Audit log** | Every request is logged with IP, session prefix and text length (no payload). 429 and backend errors too. |
+| **CORS** | Default empty = blocked. Set `ALLOWED_ORIGIN` explicitly. |
 
-### Operative Pflichten
+### Operator obligations
 
-- **`API_TOKEN`** zwingend vor öffentlicher Erreichbarkeit setzen — möglichst lang (≥32 Zeichen, generiert via `openssl rand -hex 32`).
-- **`TRUST_PROXY_HEADERS=1`** setzen, sobald VoxGate hinter Caddy/Nginx läuft, damit das Rate-Limit auf die echte Client-IP wirkt statt auf die Proxy-IP. Nur einschalten, wenn der Proxy `X-Forwarded-For` zuverlässig setzt — sonst fälscht der Client sich seine IP.
-- **Anthropic-Spending-Limit** im Console-Dashboard setzen, als Versicherung gegen Token-Leak.
-- **Caddy-CSP-Override** vermeiden: VoxGate setzt CSP selbst — Caddy nicht zusätzlich `header` für CSP konfigurieren.
-- **Key-Rotation:** `ANTHROPIC_API_KEY` wird beim ersten `/claude`-Aufruf gecacht. Nach Rotation Container/Prozess neu starten.
+- Set **`API_TOKEN`** before exposing the server publicly — preferably long (≥32 chars, generated via `openssl rand -hex 32`).
+- Set **`TRUST_PROXY_HEADERS=1`** once VoxGate runs behind Caddy/Nginx so the rate limit applies to the real client IP. Only enable when the proxy reliably sets `X-Forwarded-For` — otherwise clients can spoof their own IP.
+- Set an **Anthropic spending limit** in the console dashboard as insurance against token leaks.
+- Avoid **Caddy CSP overrides**: VoxGate sets CSP itself — don't add a separate `header` for CSP in Caddy.
+- **Key rotation:** `ANTHROPIC_API_KEY` is cached on first `/claude` call. Restart the container/process after rotation.
 
-### Verbleibende Risiken
+### Residual risks
 
-- **localStorage-XSS:** Das Bearer-Token (falls genutzt vom PWA-Client) liegt in `localStorage`. CSP blockiert Inline-Scripts, aber jede zukünftige `innerHTML`-Verwendung mit Antwortdaten würde das Token gefährden. Bei Code-Änderungen am PWA-Output beachten.
-- **In-Memory-Sessions:** Verläufe leben nur im Prozess. Bei Neustart weg. Kein Datenträger-Leak — bewusst so.
-- **Kein Per-Benutzer-Rate-Limit:** Rate-Limit ist pro IP. Hinter NAT/CGNAT teilen sich Benutzer ein Limit.
+- **localStorage XSS:** the bearer token (when used by the PWA client) lives in `localStorage`. CSP blocks inline scripts, but any future use of `innerHTML` with response data would leak the token. Mind this when changing PWA output rendering.
+- **In-memory sessions:** histories live in the process only. Lost on restart. No disk leak — by design.
+- **No per-user rate limit:** rate limiting is per IP. Behind NAT/CGNAT users share a quota.
 
-## Skalierung & Deployment-Beschränkungen
+## Scaling & deployment constraints
 
-**VoxGate muss mit genau einem Uvicorn-Worker pro Prozess laufen.** Der `/claude`-Endpoint hält den Konversationsverlauf pro `session_id` in einem In-Memory-Dict. Jeder Worker-Prozess hat eine eigene Kopie — Anfragen, die auf unterschiedlichen Workern landen, sehen unterschiedliche (oder leere) Verläufe. Für Benutzer wirkt das wie sporadischer "Gedächtnisverlust" mitten im Gespräch.
+**VoxGate must run with exactly one Uvicorn worker per process.** The `/claude` endpoint keeps conversation history per `session_id` in an in-memory dict. Each worker process has its own copy — requests routed to different workers see different (or empty) histories. Users would experience sporadic "memory loss" mid-conversation.
 
-Das mitgelieferte `Dockerfile` und `docker-compose.yml` starten bereits einen einzelnen Worker — out-of-the-box ist also alles in Ordnung.
+The shipped `Dockerfile` and `docker-compose.yml` already start a single worker — out of the box this is fine.
 
-### Warum sollte man überhaupt skalieren?
+### Why scale at all?
 
-Drei typische Motive — für VoxGate aktuell alle nicht akut:
+Three typical motives — none of them currently pressing for VoxGate:
 
-1. **CPU-Auslastung.** Pythons GIL begrenzt einen Prozess auf einen Kern. Mehrere Worker = mehrere Kerne. Hier irrelevant: der Server ist I/O-bound (er wartet nur auf Anthropic). Ein async-Worker bedient hunderte parallele Anfragen.
-2. **Durchsatz / parallele Benutzer.** Viele gleichzeitig aktive Sessions könnten einen Worker auslasten. Eine private oder familiengrosse Installation erreicht das nie.
-3. **Hochverfügbarkeit.** Mehrere Container hinter einem Load Balancer überleben den Ausfall einer einzelnen Instanz. Das wahrscheinlichste reale Motiv, sobald VoxGate für mehrere Personen läuft.
+1. **CPU utilization.** Python's GIL limits one process to one CPU core. Multiple workers can use multiple cores. Not relevant here: the server is I/O-bound (it just waits for the Anthropic API). One async worker handles hundreds of concurrent requests.
+2. **Throughput / concurrent users.** Many simultaneously active sessions could saturate one worker. A personal or family-sized installation will never hit this.
+3. **High availability.** Multiple containers behind a load balancer survive the loss of any single instance. The most realistic motivation once VoxGate is shared with others.
 
-### Implikationen
+### Implications
 
-- Setze **kein** `--workers N` (N > 1) bei `uvicorn`.
-- Stelle **keine** mehreren VoxGate-Container hinter einen Load Balancer mit aktivem `/claude`, ausser mit Sticky Sessions konfiguriert (und selbst das ist beim Container-Neustart fragil).
-- Verläufe gehen beim Container-Neustart verloren — das ist ein bewusstes Design für eine leichtgewichtige Installation.
-- `/prompt` ist stateless und unbetroffen — den Teil zu skalieren ist unproblematisch.
+- Do **not** set `--workers N` (N > 1) on `uvicorn`.
+- Do **not** put multiple VoxGate containers behind a load balancer with `/claude` enabled, unless sticky sessions are configured (and even then it's brittle on container restarts).
+- Histories are lost on container restart — intentional design for a lightweight install.
+- `/prompt` is stateless and unaffected — scaling that part is safe.
 
-### Migrationspfad (falls Skalierung nötig wird)
+### Migration path (if scaling becomes necessary)
 
-Das `_sessions`-Dict aus dem Prozess-Speicher in einen geteilten Store auslagern. Redis ist die Standardwahl: jeder Worker liest/schreibt aus Redis, alle Worker bleiben synchron, Sessions überleben Neustarts. Erfordert eine zusätzliche Abhängigkeit und Anpassung von `server.py`.
+Move the `_sessions` dict out of process memory into a shared store. Redis is the standard choice: each worker reads/writes session history from Redis, all workers stay in sync, sessions survive restarts. Adds a dependency and requires reworking `server.py`.
 
-## Dateistruktur
+## File structure
 
 ```
 voxgate/
-├── server.py              # FastAPI-Gateway (/claude, /prompt, /config)
+├── server.py              # FastAPI gateway (/claude, /prompt, /config)
 ├── pwa/
-│   ├── index.html         # Voice-UI mit TTS, Sprach-Toggle, Sessions
-│   ├── manifest.json      # PWA-Manifest
-│   ├── sw.js              # Service Worker
-│   └── icon.svg           # App-Icon
+│   ├── index.html         # Voice UI (TTS, language toggle, sessions)
+│   ├── app.js             # PWA logic
+│   ├── styles.css         # PWA styles
+│   ├── manifest.json      # PWA manifest
+│   ├── sw.js              # Service worker
+│   └── icon.svg           # App icon
 ├── tests/
-│   └── test_server.py     # pytest-Tests (Endpoints, Auth, Sessions)
+│   └── test_server.py     # pytest tests (endpoints, auth, sessions, security)
 ├── .claude/
-│   └── rules/             # Code-Regeln für Claude Code (security, quality, …)
-├── .env.example           # Vorlage für Konfiguration
+│   └── rules/             # Code rules for Claude Code (security, quality, …)
+├── .env.example           # Configuration template
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
 ├── Makefile               # make setup/run/test/lint
-├── CLAUDE.md              # Playbook für Claude Code
-├── CONTRIBUTING.md        # Mitwirken
-├── SETUP.md               # Detaillierte Setup-Anleitung
-└── lessons.md             # Lernerfahrungen
+├── CLAUDE.md              # Playbook for Claude Code
+├── CONTRIBUTING.md        # How to contribute
+├── SETUP.md               # Detailed setup guide
+└── lessons.md             # Lessons learned
 ```
 
-## Entwicklung
+## Development
 
 ```bash
-make setup          # venv anlegen, Abhängigkeiten installieren
-make run            # Server lokal starten
+make setup          # create venv, install dependencies
+make run            # start server locally
 make test           # pytest
 make lint           # ruff
 make format         # ruff format
 make check          # lint + test
 ```
 
-Siehe [`CONTRIBUTING.md`](CONTRIBUTING.md) für Details zu Konventionen und Workflow.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for conventions and workflow.
 
-## Voraussetzungen
+## Requirements
 
-- Python 3.10+ (oder Docker)
-- Chrome (Desktop oder Android) für die Web Speech API
-- Anthropic-API-Key (für `/claude`) oder ein eigenes Backend (für `/prompt`)
+- Python 3.10+ (or Docker)
+- Chrome (desktop or Android) for the Web Speech API
+- Anthropic API key (for `/claude`) or a custom backend (for `/prompt`)
 
-## Lizenz
+## License
 
 MIT

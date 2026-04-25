@@ -1,55 +1,55 @@
 # VoxGate Setup
 
-Ausführliche Anleitung für System-Betreiber. Für die Übersicht siehe [`README.md`](README.md).
+Detailed guide for system operators. For an overview see [`README.md`](README.md).
 
-## Variante A: Docker (empfohlen)
+## Option A: Docker (recommended)
 
-### 1. Klonen und konfigurieren
+### 1. Clone and configure
 
 ```bash
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate
 cp .env.example .env
-# .env editieren — siehe nächster Abschnitt
+# Edit .env — see next section
 ```
 
-### 2. `.env` ausfüllen
+### 2. Fill in `.env`
 
-Mindestens **eines** der folgenden Backends konfigurieren:
+Configure at least **one** of the following backends:
 
-**Direct-Claude (einfachster Weg):**
+**Direct Claude (simplest):**
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
-SYSTEM_PROMPT=Du bist ein hilfreicher Assistent. Antworte knapp.
-API_TOKEN_CLAUDE=ein-zufaelliger-langer-string
+SYSTEM_PROMPT=You are a helpful assistant. Answer concisely.
+API_TOKEN_CLAUDE=a-long-random-string
 ```
 
-**Eigenes Backend per Forwarding:**
+**Custom backend via forwarding:**
 ```bash
 TARGET_URL=http://host.docker.internal:9000/prompt
 TARGET_TOKEN=optional-bearer-token
-API_TOKEN_CLAUDE=ein-zufaelliger-langer-string
+API_TOKEN_CLAUDE=a-long-random-string
 ```
 
-> ⚠️ **Wichtig:** Setze `API_TOKEN_*` immer, sobald der Server von aussen erreichbar ist. Ohne Token kann jeder Anfragen stellen — bei aktivem `/claude` zahlst du die Anthropic-Rechnung für Fremde.
+> ⚠️ **Important:** Always set `API_TOKEN_*` once the server is reachable from outside. Without a token anyone can send requests — with `/claude` active you pay the Anthropic bill for strangers.
 >
-> Seit der Security-Härtung **weigert sich der Server zu starten**, wenn ein Backend konfiguriert ist und `API_TOKEN` leer. Nur `VOXGATE_ALLOW_OPEN=1` umgeht das (lokale Entwicklung).
+> Since the security hardening, **the server refuses to start** when a backend is configured and `API_TOKEN` is empty. Only `VOXGATE_ALLOW_OPEN=1` bypasses (local development).
 >
-> Token generieren: `openssl rand -hex 32`
+> Generate a token: `openssl rand -hex 32`
 
-### 3. Starten
+### 3. Start
 
 ```bash
 docker compose up -d
 ```
 
-Default-Instanzen:
+Default instances:
 - **Claude** → http://localhost:8001
 - **Dokbot** → http://localhost:8002
 
-### 4. Weitere Instanzen
+### 4. More instances
 
-In `docker-compose.yml` einen Service ergänzen:
+Add a service in `docker-compose.yml`:
 
 ```yaml
 notes:
@@ -57,38 +57,38 @@ notes:
   ports:
     - "8003:8000"
   environment:
-    - INSTANCE_NAME=Notizen
+    - INSTANCE_NAME=Notes
     - INSTANCE_COLOR=#ff6b6b
     - SPEECH_LANG=de-CH
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    - SYSTEM_PROMPT=Du bist ein Notiz-Assistent.
+    - SYSTEM_PROMPT=You are a note-taking assistant.
     - API_TOKEN=${API_TOKEN_NOTES:-}
-    - ALLOWED_ORIGIN=https://notizen.example.com
+    - ALLOWED_ORIGIN=https://notes.example.com
 ```
 
-## Variante B: Direkt (ohne Docker)
+## Option B: Direct (without Docker)
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-# Installiert fastapi, uvicorn, httpx, anthropic plus Dev-Tools
+# Installs fastapi, uvicorn, httpx, anthropic plus dev tools
 
 export INSTANCE_NAME="Claude"
 export INSTANCE_COLOR="#c8ff00"
 export ANTHROPIC_API_KEY="sk-ant-..."
-export API_TOKEN="dein-langer-zufaelliger-token"
+export API_TOKEN="your-long-random-token"
 export ALLOWED_ORIGIN="https://claude.example.com"
 
 uvicorn server:app --host 127.0.0.1 --port 8000
-# WICHTIG: kein --workers N — siehe Skalierungshinweis in README
+# IMPORTANT: do not pass --workers N — see scaling notes in README
 ```
 
-> ⚠️ **Niemals** ohne `API_TOKEN` auf einem öffentlich erreichbaren Server betreiben.
+> ⚠️ **Never** run without `API_TOKEN` on a publicly reachable server.
 
-## HTTPS (Pflicht für Web Speech API auf Android)
+## HTTPS (mandatory for the Web Speech API on Android)
 
-Caddy mit automatischen Zertifikaten:
+Caddy with automatic certificates:
 
 ```
 # Caddyfile
@@ -100,20 +100,20 @@ dokbot.example.com {
 }
 ```
 
-Caddy setzt `X-Forwarded-For` automatisch. Damit Rate-Limit auf die echte Client-IP greift, in `.env` zusätzlich:
-
-```bash
-TRUST_PROXY_HEADERS=1
-```
-
-> ⚠️ `TRUST_PROXY_HEADERS=1` nur einschalten, wenn der Server **ausschliesslich** über den Proxy erreichbar ist. Sonst kann der Client `X-Forwarded-For` selbst setzen und das Rate-Limit umgehen.
-
 ```bash
 apt install caddy
 caddy run --config /etc/caddy/Caddyfile
 ```
 
-## Systemd (eine Unit pro Instanz)
+Caddy sets `X-Forwarded-For` automatically. To make rate limiting use the real client IP, also set in `.env`:
+
+```bash
+TRUST_PROXY_HEADERS=1
+```
+
+> ⚠️ Only enable `TRUST_PROXY_HEADERS=1` when the server is reachable **only** through the proxy. Otherwise clients can set `X-Forwarded-For` themselves and bypass rate limiting.
+
+## Systemd (one unit per instance)
 
 ```ini
 # /etc/systemd/system/voxgate-claude.service
@@ -127,10 +127,11 @@ Environment="INSTANCE_NAME=Claude"
 Environment="INSTANCE_COLOR=#c8ff00"
 Environment="SPEECH_LANG=de-CH"
 Environment="ANTHROPIC_API_KEY=sk-ant-..."
-Environment="SYSTEM_PROMPT=Du bist ein hilfreicher Assistent. Antworte knapp."
-Environment="API_TOKEN=langer-zufaelliger-token"
+Environment="SYSTEM_PROMPT=You are a helpful assistant. Answer concisely."
+Environment="API_TOKEN=long-random-token"
 Environment="ALLOWED_ORIGIN=https://claude.example.com"
-# Kein --workers N — Sessions werden In-Memory gehalten (siehe README "Skalierung")
+Environment="TRUST_PROXY_HEADERS=1"
+# Do not pass --workers N — sessions are kept in memory (see "Scaling" in README)
 ExecStart=/opt/voxgate/.venv/bin/uvicorn server:app --host 127.0.0.1 --port 8001
 Restart=always
 
@@ -144,28 +145,28 @@ systemctl enable --now voxgate-claude
 journalctl -u voxgate-claude -f
 ```
 
-## PWA auf dem Pixel installieren
+## Install the PWA on a Pixel
 
-1. Chrome öffnen → https://claude.example.com
-2. Drei-Punkte-Menü → "Zum Startbildschirm hinzufügen"
-3. Für jede Instanz wiederholen — verschiedene URL = verschiedene PWA mit eigener Farbe und eigenem Icon.
+1. Open Chrome → https://claude.example.com
+2. Three-dot menu → "Add to Home screen"
+3. Repeat for each instance — different URL = different PWA with its own color and icon.
 
-## Eigenes Backend für `/prompt`
+## Custom backend for `/prompt`
 
-Jeder HTTP-Service, der diesen Vertrag erfüllt, funktioniert als Ziel:
+Any HTTP service that fulfills this contract works as a target:
 
 ```
 POST <TARGET_URL>
 Content-Type: application/json
-Authorization: Bearer <TARGET_TOKEN>     # falls TARGET_TOKEN gesetzt
+Authorization: Bearer <TARGET_TOKEN>     # if TARGET_TOKEN is set
 
 {"text": "voice input text"}
-→ {"response": "Antwort"}
+→ {"response": "answer"}
 ```
 
-### Beispiel: Claude-Code-Wrapper
+### Example: Claude Code wrapper
 
-Ein minimales Backend, das die Claude-Code-CLI aufruft:
+A minimal backend that invokes the Claude Code CLI:
 
 ```python
 from fastapi import FastAPI
@@ -186,12 +187,12 @@ async def prompt(req: Req):
     return {"response": result.stdout.strip()}
 ```
 
-Läuft auf der Maschine, auf der Claude Code installiert ist (z.B. dein Mac). VoxGate läuft auf dem Server und leitet weiter.
+Runs on the machine where Claude Code is installed (e.g. your Mac). VoxGate runs on the server and forwards to it.
 
-## Wartung & Betrieb
+## Maintenance & operations
 
-- **Logs:** `docker compose logs -f` bzw. `journalctl -u voxgate-* -f`
+- **Logs:** `docker compose logs -f` or `journalctl -u voxgate-* -f`
 - **Update:** `git pull && docker compose build && docker compose up -d`
-- **Sessions:** werden im Speicher gehalten, gehen beim Neustart verloren. Das ist beabsichtigt für eine leichtgewichtige Installation.
-- **Anthropic-Kosten überwachen:** Dashboard auf console.anthropic.com nutzen, ggf. Spending Limits setzen.
-- **Single-Worker-Constraint beachten:** Siehe Abschnitt "Skalierung" in der `README.md`.
+- **Sessions:** kept in memory; lost on restart. Intentional for a lightweight install.
+- **Monitor Anthropic costs:** use the console.anthropic.com dashboard, set spending limits.
+- **Single-worker constraint:** see the "Scaling" section in `README.md`.
