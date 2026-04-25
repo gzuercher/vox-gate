@@ -2,8 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir fastapi uvicorn httpx
+# Dependencies are mirrored from pyproject.toml; keep both in sync.
+RUN pip install --no-cache-dir \
+    'fastapi>=0.100' \
+    'uvicorn>=0.20' \
+    'httpx>=0.25' \
+    'anthropic>=0.40'
 
 COPY server.py .
 COPY pwa/ pwa/
