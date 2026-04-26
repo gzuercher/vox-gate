@@ -40,22 +40,23 @@ SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))
 MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "1000"))
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "30"))
 TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "0") == "1"
-ALLOW_OPEN = os.environ.get("VOXGATE_ALLOW_OPEN", "0") == "1"
 
-if not ALLOW_OPEN and not API_TOKEN and (ANTHROPIC_API_KEY or TARGET_URL):
+if os.environ.get("VOXGATE_ALLOW_OPEN"):
     print(
-        "FATAL: API_TOKEN is empty but a backend is configured "
-        "(ANTHROPIC_API_KEY or TARGET_URL). Refusing to start to prevent "
-        "unauthenticated access to paid backends. "
-        "Set API_TOKEN, or set VOXGATE_ALLOW_OPEN=1 for local development.",
+        "WARNING: VOXGATE_ALLOW_OPEN is no longer used. API_TOKEN is now "
+        "auto-generated when empty (see logs). Remove the variable from "
+        "your environment. See SECURITY.md.",
         file=sys.stderr,
     )
-    raise SystemExit(1)
 
 if not API_TOKEN:
+    API_TOKEN = secrets.token_hex(32)
     print(
-        "WARNING: API_TOKEN is not set. Endpoints are unauthenticated. "
-        "Only acceptable for local development.",
+        "\n" + "=" * 60 + "\n"
+        "No API_TOKEN set. Generated for this run:\n\n"
+        f"  API_TOKEN={API_TOKEN}\n\n"
+        "Paste into your .env to keep it stable across restarts.\n"
+        + "=" * 60,
         file=sys.stderr,
     )
 

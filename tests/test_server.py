@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(autouse=True)
 def _clear_env(monkeypatch):
-    monkeypatch.setenv("API_TOKEN", "")
+    monkeypatch.setenv("API_TOKEN", "test-token")
     monkeypatch.setenv("TARGET_URL", "http://backend:9000/prompt")
     monkeypatch.setenv("TARGET_TOKEN", "")
     monkeypatch.setenv("ALLOWED_ORIGIN", "")
@@ -15,17 +15,22 @@ def _clear_env(monkeypatch):
     monkeypatch.setenv("INSTANCE_COLOR", "#ff0000")
     monkeypatch.setenv("SPEECH_LANG", "de-CH")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    monkeypatch.setenv("VOXGATE_ALLOW_OPEN", "1")
+    monkeypatch.delenv("VOXGATE_ALLOW_OPEN", raising=False)
     monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "10000")
 
 
 def _reload_app():
     import importlib
+    import os
 
     import server
 
     importlib.reload(server)
-    return TestClient(server.app)
+    client = TestClient(server.app)
+    token = os.environ.get("API_TOKEN") or server.API_TOKEN
+    if token:
+        client.headers.update({"Authorization": f"Bearer {token}"})
+    return client
 
 
 def _mock_target(json_body=None, status_code=200, raise_error=False):
@@ -100,12 +105,6 @@ class TestPromptEndpoint:
 
 
 class TestAuth:
-    def test_no_token_required_when_unset(self):
-        client = _reload_app()
-        with _mock_target():
-            res = client.post("/prompt", json={"text": "hi"})
-        assert res.status_code == 200
-
     def test_valid_token_accepted(self, monkeypatch):
         monkeypatch.setenv("API_TOKEN", "secret123")
         client = _reload_app()
@@ -130,6 +129,7 @@ class TestAuth:
     def test_missing_token_rejected_when_required(self, monkeypatch):
         monkeypatch.setenv("API_TOKEN", "secret123")
         client = _reload_app()
+        client.headers.pop("Authorization", None)
         res = client.post("/prompt", json={"text": "hi"})
         assert res.status_code == 401
 
@@ -252,6 +252,7 @@ class TestClaudeEndpoint:
         monkeypatch.setenv("API_TOKEN", "secret123")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "key")
         client = _reload_app()
+        client.headers.pop("Authorization", None)
         res = client.post("/claude", json={"text": "hi", "session_id": "sessshort"})
         assert res.status_code == 401
 
@@ -354,28 +355,39 @@ class TestSessionTTL:
         assert len(server._sessions) <= 3
 
 
-class TestFailLoudStartup:
-    def test_refuses_when_anthropic_set_and_no_token(self, monkeypatch):
+class TestAutoTokenStartup:
+    def test_auto_generates_token_when_empty(self, monkeypatch):
         monkeypatch.setenv("API_TOKEN", "")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-xxx")
-        monkeypatch.setenv("VOXGATE_ALLOW_OPEN", "0")
-        with pytest.raises(SystemExit):
-            _reload_app()
-
-    def test_refuses_when_target_set_and_no_token(self, monkeypatch):
-        monkeypatch.setenv("API_TOKEN", "")
-        monkeypatch.setenv("TARGET_URL", "http://x/y")
-        monkeypatch.setenv("VOXGATE_ALLOW_OPEN", "0")
-        with pytest.raises(SystemExit):
-            _reload_app()
-
-    def test_starts_with_token_set(self, monkeypatch):
-        monkeypatch.setenv("API_TOKEN", "secret")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-xxx")
-        monkeypatch.setenv("VOXGATE_ALLOW_OPEN", "0")
         client = _reload_app()
-        res = client.get("/config")
-        assert res.status_code == 200
+        import server
+
+        assert len(server.API_TOKEN) >= 32
+        # /config remains public
+        assert client.get("/config").status_code == 200
+
+    def test_auto_generated_token_protects_prompt(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "")
+        client = _reload_app()
+        client.headers.pop("Authorization", None)
+        res = client.post("/prompt", json={"text": "hi"})
+        assert res.status_code == 401
+
+    def test_explicit_token_wins_over_autogen(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "explicit-secret")
+        _reload_app()
+        import server
+
+        assert server.API_TOKEN == "explicit-secret"
+
+    def test_legacy_allow_open_is_ignored(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "secret")
+        monkeypatch.setenv("VOXGATE_ALLOW_OPEN", "1")
+        client = _reload_app()
+        client.headers.pop("Authorization", None)
+        # Setting the legacy variable does not crash and does not weaken auth.
+        res = client.post("/prompt", json={"text": "hi"})
+        assert res.status_code == 401
 
 
 class TestTimingSafeAuth:
