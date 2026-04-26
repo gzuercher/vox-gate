@@ -4,7 +4,8 @@
 
 VoxGate is a small web app you install on your phone home screen like a
 native app. Tap the mic, speak, and hear the answer read back to you.
-Works in Swiss German and Swiss French.
+Recognizes standard German and French; the UI defaults to the Swiss
+locales `de-CH` and `fr-CH`.
 
 ## What do you want to do?
 
