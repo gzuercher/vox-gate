@@ -1,0 +1,31 @@
+services:
+  voxgate:
+    build: ../..
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TRUST_PROXY_HEADERS=1
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - VOXGATE_DOMAIN=${VOXGATE_DOMAIN:?set VOXGATE_DOMAIN in .env}
+      - ACME_EMAIL=${ACME_EMAIL:?set ACME_EMAIL in .env}
+    depends_on:
+      - voxgate
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
