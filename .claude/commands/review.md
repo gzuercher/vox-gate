@@ -1,18 +1,18 @@
 ---
-description: Code Review des aktuellen Branches durchführen
+description: Code review of the current branch
 ---
 
-Führe ein gründliches Code Review durch:
+Run a thorough code review:
 
-1. Zeige `git diff main...HEAD` (oder den Hauptbranch)
-2. Prüfe jede geänderte Datei auf:
-   - Sicherheitsprobleme (siehe .claude/rules/security.md)
-   - Code-Qualität (siehe .claude/rules/code-quality.md)
-   - Zugänglichkeit bei UI-Änderungen (siehe .claude/rules/accessibility.md)
-3. Prüfe ob Tests vorhanden und sinnvoll sind
-4. Fasse zusammen:
-   - ✅ Was gut ist
-   - ⚠️ Was verbessert werden sollte (mit konkretem Vorschlag)
-   - 🛑 Was blockierend ist (Sicherheit, Breaking Changes)
+1. Show `git diff main...HEAD` (or whatever the main branch is).
+2. For every changed file check for:
+   - Security issues (see `.claude/rules/security.md`)
+   - Code quality (see `.claude/rules/code-quality.md`)
+   - Accessibility for UI changes (see `.claude/rules/accessibility.md`)
+3. Verify that tests are present and meaningful.
+4. Summarize:
+   - ✅ What is good
+   - ⚠️ What should be improved (with a concrete suggestion)
+   - 🛑 What is blocking (security, breaking changes)
 
-Sei direkt und konstruktiv. Keine Floskeln.
+Be direct and constructive. No filler.

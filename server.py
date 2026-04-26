@@ -45,7 +45,7 @@ if os.environ.get("VOXGATE_ALLOW_OPEN"):
     print(
         "WARNING: VOXGATE_ALLOW_OPEN is no longer used. API_TOKEN is now "
         "auto-generated when empty (see logs). Remove the variable from "
-        "your environment. See SECURITY.md.",
+        "your environment. See docs/security.md.",
         file=sys.stderr,
     )
 

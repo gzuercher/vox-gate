@@ -3,30 +3,29 @@ description: Tech stack and build commands for VoxGate
 globs: "*.py,*.html,*.js,*.json"
 ---
 
-# Development Stack
+# Development stack
 
-## Tech Stack
-- **Backend:** Python 3.10+, FastAPI, Uvicorn
+## Tech stack
+- **Backend:** Python 3.10+, FastAPI, Uvicorn, httpx
 - **Frontend:** Vanilla HTML/CSS/JS (no build step)
-- **Speech:** Web Speech API (`de-CH`)
-- **CLI:** Claude Code (`claude -p`)
-- **Reverse Proxy:** Caddy (production)
+- **Speech:** Web Speech API (`de-CH`, `fr-CH`)
+- **Reverse proxy:** Caddy (production; bundled in `deploy/caddy/`)
 
-## Build & Run
+## Build & run
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install fastapi uvicorn
-uvicorn server:app --host 0.0.0.0 --port 8000
+make setup       # create venv, install dependencies
+make run         # uvicorn server:app on :8000
+make test        # pytest
+make check       # lint + tests
 ```
 
 ## Verification
 
 Check every change before reporting it as done:
-1. Server must start without errors
-2. `POST /prompt` must return a valid response
-3. If UI change: verify in browser
+1. Server starts without errors.
+2. `make test` is green.
+3. If UI changes: verify in the browser (and on a phone for PWA changes).
 
 ## Do not self-implement
 

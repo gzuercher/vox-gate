@@ -6,42 +6,41 @@ VoxGate is a small web app you install on your phone home screen like a
 native app. Tap the mic, speak, and hear the answer read back to you.
 Works in Swiss German and Swiss French.
 
-## Was willst du tun?
+## What do you want to do?
 
-### A) Mit Claude per Stimme reden — eigene (Sub-)Domain
+### A) Talk to Claude by voice — own (sub-)domain
 
-Empfohlener Pfad. Du brauchst eine Subdomain, die auf deinen Server
-zeigt, und einen Anthropic-API-Key.
+Recommended path. You need a subdomain pointing at your server and an
+Anthropic API key.
 
 ```bash
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate/deploy/caddy
 cp .env.example .env
-# eintragen: VOXGATE_DOMAIN, ACME_EMAIL, ANTHROPIC_API_KEY
+# Fill in: VOXGATE_DOMAIN, ACME_EMAIL, ANTHROPIC_API_KEY
 docker compose up -d
 ```
 
-Caddy holt automatisch ein Lets-Encrypt-Zertifikat. Details:
+Caddy fetches a Let's Encrypt certificate automatically. Details:
 [`deploy/caddy/README.md`](deploy/caddy/README.md).
 
-### B) Eigenen Bot per Stimme erreichen (z.B. einen Planer)
+### B) Reach your own bot by voice (e.g. a planner)
 
-Gleicher Aufbau wie A, aber statt `ANTHROPIC_API_KEY` setzt du eine
-`TARGET_URL`, die auf dein Backend zeigt. Dein Backend muss einen
-einfachen HTTP-Vertrag erfuellen — siehe
-[`docs/backends.md`](docs/backends.md).
+Same setup as A, but instead of `ANTHROPIC_API_KEY` you set
+`TARGET_URL` pointing at your backend. Your backend implements a small
+HTTP contract — see [`docs/backends.md`](docs/backends.md).
 
-### C) Auf bestehender Reverse-Proxy-Infra (Traefik, Kubernetes, nginx)
+### C) Existing reverse-proxy infra (Traefik, Kubernetes, nginx)
 
-Nutze das Root-`docker-compose.yml`. Es bringt nur den VoxGate-Container
-mit; Cert-Handling und Hostname-Routing macht deine Infra. Hinweise:
-[`SETUP.md`](SETUP.md#reverse-proxy-anleitung).
+Use the root `docker-compose.yml`. It only ships the VoxGate container;
+cert handling and hostname routing happen in your infra. Notes:
+[`docs/setup.md`](docs/setup.md#reverse-proxy).
 
-### D) Ohne eigene Domain (Cloudflare Tunnel / Tailscale Funnel)
+### D) No domain of your own (Cloudflare Tunnel / Tailscale Funnel)
 
-VoxGate laesst sich problemlos hinter einen Tunnel haengen — Cloudflare
-oder Tailscale stellen das HTTPS und einen Hostnamen. Konzept und
-Pointer auf die offiziellen Setups: [`SETUP.md`](SETUP.md#tunnel-davorhaengen).
+VoxGate works behind any tunnel — Cloudflare or Tailscale provide HTTPS
+and a hostname. Concept and pointers to the official setups:
+[`docs/setup.md`](docs/setup.md#tunnel-in-front).
 
 ---
 
@@ -65,7 +64,7 @@ again while audio is playing, the current speech is cancelled.
 - **Browser:** Chrome on Android or desktop (Web Speech API).
   Safari/iOS support is limited.
 - **Microphone permission** must be granted on first launch.
-- **HTTPS** is mandatory on Android — solved by Caddy/Tunnel above.
+- **HTTPS** is mandatory on Android — solved by Caddy/tunnel above.
 
 ## Installing the PWA on your phone
 
@@ -91,10 +90,10 @@ each — every URL becomes its own PWA with its own color.
 ---
 
 The rest is reference material for developers and clients calling the
-HTTP API. For installation/operation see [`SETUP.md`](SETUP.md). For
-security checklist see [`SECURITY.md`](SECURITY.md). For backend
-examples see [`docs/backends.md`](docs/backends.md). For contributing
-see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+HTTP API. For installation/operation see [`docs/setup.md`](docs/setup.md).
+For the security checklist see [`docs/security.md`](docs/security.md).
+For backend examples see [`docs/backends.md`](docs/backends.md). For
+contributing see [`docs/contributing.md`](docs/contributing.md).
 
 ## Architecture
 
@@ -178,7 +177,11 @@ voxgate/
 ├── deploy/
 │   └── caddy/             # Bundled Caddy + VoxGate (recommended path)
 ├── docs/
-│   └── backends.md        # /prompt and /claude examples
+│   ├── setup.md           # Installation and operation
+│   ├── security.md        # Operator checklist
+│   ├── contributing.md    # Development workflow
+│   ├── backends.md        # /prompt and /claude examples
+│   └── lessons.md         # Lessons learned
 ├── .claude/rules/         # Code rules for Claude Code
 ├── .env.example           # Configuration template (api-only, root)
 ├── docker-compose.yml     # api-only (no proxy bundled)
@@ -186,11 +189,8 @@ voxgate/
 ├── pyproject.toml
 ├── Makefile               # make setup/run/test/lint
 ├── README.md              # This file
-├── SETUP.md               # Installation and operation
-├── SECURITY.md            # Operator checklist
-├── CONTRIBUTING.md        # Development workflow
 ├── CLAUDE.md              # Playbook for Claude Code
-└── lessons.md             # Lessons learned
+└── LICENSE
 ```
 
 ## License

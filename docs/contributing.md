@@ -4,9 +4,11 @@ Thanks for your interest in VoxGate. This file describes the workflow, conventio
 
 ## Language
 
-- **Communication, issues, PR descriptions, commit messages:** German (imperative, e.g. *"Füge Validierung hinzu"*).
-- **Code, comments, technical identifiers, docstrings, project documentation (README, SETUP, this file):** English.
-- **UI text:** Swiss German.
+- **Everything written into the repository is English**: code,
+  comments, identifiers, docstrings, documentation, commit messages,
+  PR descriptions, issues.
+- **Exception:** UI text follows the product target language (Swiss
+  German for the PWA).
 
 ## Setup
 
@@ -22,10 +24,10 @@ make check        # lint + tests
 
 The binding rules live in `.claude/rules/` and apply to both human contributors and Claude Code:
 
-- [`.claude/rules/security.md`](.claude/rules/security.md) — no secrets in code, bearer token via env var, validate inputs.
-- [`.claude/rules/code-quality.md`](.claude/rules/code-quality.md) — strict typing, no empty `catch` blocks, components under 200 lines.
-- [`.claude/rules/accessibility.md`](.claude/rules/accessibility.md) — semantic HTML, ARIA, keyboard navigation, color contrast (WCAG AA).
-- [`.claude/rules/dev-stack.md`](.claude/rules/dev-stack.md) — tech stack and verification rules.
+- [`../.claude/rules/security.md`](../.claude/rules/security.md) — no secrets in code, bearer token via env var, validate inputs.
+- [`../.claude/rules/code-quality.md`](../.claude/rules/code-quality.md) — strict typing, no empty `catch` blocks, components under 200 lines.
+- [`../.claude/rules/accessibility.md`](../.claude/rules/accessibility.md) — semantic HTML, ARIA, keyboard navigation, color contrast (WCAG AA).
+- [`../.claude/rules/dev-stack.md`](../.claude/rules/dev-stack.md) — tech stack and verification rules.
 
 In addition:
 
@@ -59,7 +61,7 @@ VoxGate is primarily developed with Claude Code. Useful slash commands:
 - `/build-and-test` — run build and tests
 - `/security-review` — security review of pending changes
 
-When Claude makes a mistake: correct immediately and document the lesson in `lessons.md` (format: `- [Date]: [What went wrong] → [Correct approach]`). For recurring patterns, update `CLAUDE.md` or a rule under `.claude/rules/` instead.
+When Claude makes a mistake: correct immediately and document the lesson in [`lessons.md`](lessons.md) (format: `- [Date]: [What went wrong] → [Correct approach]`). For recurring patterns, update `CLAUDE.md` or a rule under `.claude/rules/` instead.
 
 ## Personal settings
 

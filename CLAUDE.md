@@ -3,28 +3,30 @@
 Voice gateway PWA – each instance forwards speech input via HTTP to a configurable backend.
 No Claude CLI in the container; the server is a pure forwarding proxy.
 
-## Grundhaltung
+## Working principles
 
-- Frage nach, statt zu raten. Unsicherheit offen kommunizieren.
-- Keine irreversiblen Aktionen ohne explizite Bestätigung (Dateien löschen, pushen, deployen).
-- Keine Secrets, Passwörter oder API-Keys in Dateien speichern.
-- Änderungen beschreiben bevor sie gemacht werden, wenn sie grösseren Umfang haben.
+- Ask instead of guessing. Communicate uncertainty openly.
+- No irreversible actions without explicit confirmation (deleting files, pushing, deploying).
+- Never store secrets, passwords, or API keys in files.
+- Describe changes before making them when they are non-trivial in scope.
 
-## Sprache
+## Language
 
-- Kommunikation mit dem Benutzer: Deutsch
-- Entwicklung (Code, Kommentare, Dokumentation, README, Variablen, Funktionen, technische Bezeichner): Englisch
-- Ausnahme: UI-Texte richten sich nach der Zielsprache des Produkts (Deutsch).
-- Commit-Messages: Deutsch, Imperativ ("Füge Validierung hinzu")
+- **All project content is English**: code, comments, documentation,
+  README, commit messages, variable and function names, technical
+  identifiers.
+- **Exception:** UI text follows the product target language (Swiss
+  German for the PWA).
+- Conversation language with the user follows the user's lead in chat.
 
-## Tech Stack
+## Tech stack
 
 - **Backend:** Python 3.10+, FastAPI, Uvicorn, httpx
 - **Frontend:** Vanilla HTML/CSS/JS, Web Speech API, PWA
 - **Container:** Docker, docker-compose
-- **Reverse Proxy:** Caddy (production)
+- **Reverse proxy:** Caddy (production)
 
-## Build & Run
+## Build & run
 
 ```bash
 docker compose up -d            # Docker
@@ -32,22 +34,23 @@ docker compose up -d            # Docker
 make setup && make run          # local
 ```
 
-## Fehler-Lernen
+## Learning from mistakes
 
-Wenn du korrigiert wirst, dokumentiere die Lektion in `lessons.md`:
-`- [Datum]: [Was falsch war] → [Korrekte Vorgehensweise]`
+When you are corrected, record the lesson in `docs/lessons.md`:
+`- [YYYY-MM-DD]: [What was wrong] → [Correct approach]`
 
-## Eskalation
+## Escalation
 
-Gib eine sichtbare Warnung (⚠️ Review empfohlen) bei:
-- Authentifizierung und Zugriffsrechte
-- Öffentliche APIs
-- Deployment und Infrastruktur
-- Personendaten (DSG/DSGVO)
+Show a visible warning (⚠️ Review recommended) for changes touching:
+- Authentication and access control
+- Public APIs
+- Deployment and infrastructure
+- Personal data (DSG/GDPR)
 
-## Entwickler-Regeln
+## Developer rules
 
-Für technische Details gelten zusätzlich die Regeln in `.claude/rules/`:
-- `security.md` — Sicherheitsregeln
-- `code-quality.md` — Codequalität und Standards
-- `accessibility.md` — Zugänglichkeit
+For technical details the rules in `.claude/rules/` apply additionally:
+- `security.md` — security rules
+- `code-quality.md` — code quality and standards
+- `accessibility.md` — accessibility
+- `dev-stack.md` — development stack and verification

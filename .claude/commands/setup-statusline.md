@@ -1,14 +1,14 @@
-Richte die Raptus-Statuszeile für Claude Code ein. Folge diesen Schritten exakt:
+Set up the Raptus status line for Claude Code. Follow these steps exactly:
 
-## Schritt 1 — Betriebssystem erkennen
+## Step 1 — Detect the operating system
 
-Erkenne das Betriebssystem (macOS/Linux → Bash-Script, Windows → PowerShell-Script).
+Detect the OS (macOS/Linux → bash script, Windows → PowerShell script).
 
-## Schritt 2 — Script erstellen
+## Step 2 — Create the script
 
 ### macOS / Linux
 
-Erstelle die Datei `~/.claude/statusline.sh` mit folgendem Inhalt:
+Create the file `~/.claude/statusline.sh` with the following content:
 
 ```bash
 #!/usr/bin/env bash
@@ -69,11 +69,11 @@ line2+="${SEP}${GRAY}⏱ ${dur_fmt}${RESET}"
 printf "%b\n%b\n" "$line1" "$line2"
 ```
 
-Mache die Datei ausführbar: `chmod +x ~/.claude/statusline.sh`
+Make the file executable: `chmod +x ~/.claude/statusline.sh`
 
 ### Windows
 
-Erstelle die Datei `$env:USERPROFILE\.claude\statusline.ps1` mit folgendem Inhalt:
+Create the file `$env:USERPROFILE\.claude\statusline.ps1` with the following content:
 
 ```powershell
 # Raptus AG — Claude Code Statusline (Windows)
@@ -119,9 +119,9 @@ Write-Host $line1
 Write-Host $line2
 ```
 
-## Schritt 3 — settings.json aktualisieren
+## Step 3 — Update settings.json
 
-Öffne `~/.claude/settings.json` (bzw. `$env:USERPROFILE\.claude\settings.json` auf Windows) und füge den `statusLine`-Block hinzu oder ersetze einen bestehenden. Behalte alle anderen Einstellungen.
+Open `~/.claude/settings.json` (or `$env:USERPROFILE\.claude\settings.json` on Windows) and add the `statusLine` block, or replace an existing one. Keep all other settings.
 
 **macOS / Linux:**
 ```json
@@ -141,13 +141,13 @@ Write-Host $line2
 }
 ```
 
-## Schritt 4 — Bestätigen
+## Step 4 — Confirm
 
-Melde kurz, welches OS erkannt wurde, wo die Dateien erstellt wurden, und dass Claude Code neu gestartet werden muss, damit die Statuszeile aktiv wird.
+Briefly report which OS was detected, where the files were created, and that Claude Code must be restarted for the status line to take effect.
 
 ---
 
-**Erwartetes Ergebnis:**
+**Expected result:**
 ```
 [Sonnet]  📁 mein-projekt  │  🌿 main
 ████░░░░░░ 8%  │  $0.00  │  ⏱ 0s

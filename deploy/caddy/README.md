@@ -1,53 +1,53 @@
 # VoxGate + Caddy bundle
 
-Empfohlener Pfad fuer Self-Hosting mit eigener (Sub-)Domain. Caddy
-holt das Lets-Encrypt-Zertifikat automatisch und reverse-proxyt auf
-VoxGate. Der VoxGate-Container ist nur ueber Caddy erreichbar.
+Recommended path for self-hosting with your own (sub-)domain. Caddy
+obtains the Let's Encrypt certificate automatically and reverse-proxies
+to VoxGate. The VoxGate container is reachable only through Caddy.
 
-## Voraussetzungen
+## Prerequisites
 
-- Server mit Docker und freien Ports 80 und 443.
-- DNS A/AAAA-Eintrag fuer `voxgate.example.com` zeigt auf den Server.
-- Kein anderer Webserver auf 80/443.
+- Server with Docker and free ports 80 and 443.
+- DNS A/AAAA record for `voxgate.example.com` pointing at the server.
+- No other web server on 80/443.
 
 ## Start
 
 ```bash
 cd deploy/caddy
 cp .env.example .env
-# Mindestens VOXGATE_DOMAIN, ACME_EMAIL und entweder ANTHROPIC_API_KEY
-# oder TARGET_URL eintragen.
+# At minimum set VOXGATE_DOMAIN, ACME_EMAIL, and either
+# ANTHROPIC_API_KEY or TARGET_URL.
 docker compose up -d
 ```
 
-Beim ersten Start holt Caddy ein Zertifikat (kann 30-60 s dauern). Logs:
+On first start Caddy fetches a certificate (30-60 s). Logs:
 
 ```bash
 docker compose logs -f caddy
 docker compose logs -f voxgate
 ```
 
-Sobald `voxgate` einen Token loggt (oder du selbst einen in `.env`
-gesetzt hast), oeffne `https://voxgate.example.com` im Browser, in der
-DevTools-Console:
+Once `voxgate` logs a token (or you set one yourself in `.env`), open
+`https://voxgate.example.com` in the browser and in the DevTools
+console run:
 
 ```js
 localStorage.apiToken = "<token>"
 ```
 
-Danach kannst du die PWA installieren ("Add to Home screen").
+After that you can install the PWA ("Add to Home screen").
 
-## Anpassungen
+## Customisation
 
-- **Mehrere Instanzen** (z.B. eine fuer Claude, eine fuer einen
-  Custom-Bot): Compose-Datei kopieren, zweiten `voxgate-*`-Service
-  ergaenzen, Caddyfile um einen weiteren Hostname-Block erweitern.
-- **CSP**: VoxGate setzt seine eigene Content-Security-Policy. Im
-  Caddyfile keine zusaetzliche `header Content-Security-Policy …`-Direktive
-  ergaenzen — sie wuerde mit der serverseitigen kollidieren.
+- **Multiple instances** (e.g. one for Claude, one for a custom bot):
+  copy the compose file, add a second `voxgate-*` service, extend the
+  `Caddyfile` with another hostname block.
+- **CSP**: VoxGate sets its own Content-Security-Policy. Do not add a
+  separate `header Content-Security-Policy …` directive in the
+  Caddyfile — it would collide with the server-side one.
 
-## Weitere Doku
+## Further docs
 
-- Konfiguration aller Env-Vars: [`../../SETUP.md`](../../SETUP.md)
-- Sicherheits-Checkliste: [`../../SECURITY.md`](../../SECURITY.md)
-- Backend-Beispiele fuer `/prompt`: [`../../docs/backends.md`](../../docs/backends.md)
+- All env vars: [`../../docs/setup.md`](../../docs/setup.md)
+- Security checklist: [`../../docs/security.md`](../../docs/security.md)
+- `/prompt` backend examples: [`../../docs/backends.md`](../../docs/backends.md)

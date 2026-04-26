@@ -1,21 +1,21 @@
 ---
-description: Code-Qualitätsregeln für TypeScript und PHP
+description: Code quality rules for TypeScript and PHP
 globs: "*.ts,*.tsx,*.js,*.jsx,*.php"
 ---
 
-# Code-Qualität
+# Code quality
 
 ## TypeScript / JavaScript
-- Strict mode: keine `any` Types, alle Funktionen typisiert.
-- Fehlerbehandlung: try/catch mit sinnvollen Meldungen, keine leeren catch-Blöcke.
-- Kein `console.log` im Produktionscode. Verwende einen Logger (pino).
-- Komponenten unter 200 Zeilen. Bei Überschreitung aufteilen.
-- Kein duplizierter Code. Gemeinsame Logik in Hilfsfunktionen extrahieren.
-- Imports: absolute Pfade bevorzugen (z.B. `@/lib/utils`).
+- Strict mode: no `any` types; type all functions.
+- Error handling: try/catch with meaningful messages; never empty catch blocks.
+- No `console.log` in production code. Use a logger (pino).
+- Components under 200 lines. Split when exceeded.
+- No duplicated code. Extract shared logic into helpers.
+- Imports: prefer absolute paths (e.g. `@/lib/utils`).
 
 ## PHP
-- PSR-12 Coding Standard einhalten.
-- Typisierung: PHP 8+ Type Hints verwenden.
-- Keine unterdrückten Fehler (`@`-Operator vermeiden).
-- WordPress: Hooks und Filter dokumentieren.
-- Laravel: Form Requests für Validierung, keine Controller-Validierung.
+- Follow the PSR-12 coding standard.
+- Typing: use PHP 8+ type hints.
+- No silenced errors (avoid the `@` operator).
+- WordPress: document hooks and filters.
+- Laravel: use Form Requests for validation, not controller validation.

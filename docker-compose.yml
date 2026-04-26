@@ -10,4 +10,4 @@ services:
 
 # To run multiple instances side by side (e.g. one for direct Claude,
 # one forwarding to a custom backend), see the "Multi-instance" section
-# in SETUP.md.
+# in docs/setup.md.

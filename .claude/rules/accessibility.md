@@ -1,14 +1,14 @@
 ---
-description: Zugänglichkeitsregeln für UI-Komponenten
+description: Accessibility rules for UI components
 globs: "*.tsx,*.jsx,*.html,*.blade.php"
 ---
 
-# Zugänglichkeit (Accessibility)
+# Accessibility
 
-- Bilder: `alt`-Attribut immer setzen.
-- Formulare: jedes Input hat ein zugehöriges Label.
-- Interaktive Elemente: per Tastatur bedienbar (Tab, Enter, Escape).
-- Farbkontraste: WCAG AA einhalten (4.5:1 für Text, 3:1 für grosse Elemente).
-- Semantisches HTML: `<button>` statt `<div onclick>`, `<nav>`, `<main>`, `<aside>`.
-- ARIA: nur verwenden wenn kein natives HTML-Element passt.
-- Focus-Management: sichtbarer Focus-Ring bei Tastaturnavigation.
+- Images: always set the `alt` attribute.
+- Forms: every input has an associated label.
+- Interactive elements: must be keyboard-operable (Tab, Enter, Escape).
+- Color contrast: meet WCAG AA (4.5:1 for text, 3:1 for large elements).
+- Semantic HTML: use `<button>` instead of `<div onclick>`, plus `<nav>`, `<main>`, `<aside>`.
+- ARIA: only when no native HTML element fits.
+- Focus management: visible focus ring during keyboard navigation.

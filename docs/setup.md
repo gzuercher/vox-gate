@@ -1,44 +1,44 @@
-# VoxGate Setup
+# VoxGate setup
 
-Installation, configuration and operation. For what VoxGate *does* see
-[`README.md`](README.md). For development workflow see
-[`CONTRIBUTING.md`](CONTRIBUTING.md). For the operator security checklist
-see [`SECURITY.md`](SECURITY.md). For backend examples see
-[`docs/backends.md`](docs/backends.md).
+Installation, configuration, and operation. For what VoxGate *does* see
+[`../README.md`](../README.md). For development workflow see
+[`contributing.md`](contributing.md). For the operator security
+checklist see [`security.md`](security.md). For backend examples see
+[`backends.md`](backends.md).
 
-## Welche Variante?
+## Which variant?
 
-| Variante | Wann | Doku |
+| Variant | When to use | Doc |
 |---|---|---|
-| **Caddy-Bundle** | Eigene (Sub-)Domain, Server mit freien Ports 80/443 | [`deploy/caddy/README.md`](deploy/caddy/README.md) |
-| **API-only (Root-Compose)** | Eigene Reverse-Proxy-Infra (Traefik, k8s, nginx) | unten, "Reverse-Proxy-Anleitung" |
-| **Tunnel davorhaengen** | Keine eigene Domain | unten, "Tunnel davorhaengen" |
-| **Direct (ohne Docker)** | Lokale Entwicklung | unten, "Direct (without Docker)" |
+| **Caddy bundle** | Own (sub-)domain, server with free ports 80/443 | [`../deploy/caddy/README.md`](../deploy/caddy/README.md) |
+| **API-only (root compose)** | Existing reverse-proxy infra (Traefik, k8s, nginx) | below, "Reverse proxy" |
+| **Tunnel in front** | No domain of your own | below, "Tunnel in front" |
+| **Direct (without Docker)** | Local development | below, "Direct (without Docker)" |
 
-## Quick start (Root-Compose, api-only)
+## Quick start (root compose, api-only)
 
 ```bash
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate
 cp .env.example .env
-# Optional: API_TOKEN, ANTHROPIC_API_KEY oder TARGET_URL setzen
+# Optional: set API_TOKEN, ANTHROPIC_API_KEY, or TARGET_URL
 docker compose up -d
 ```
 
-VoxGate listens on `http://localhost:8000`. Wenn `API_TOKEN` leer
-bleibt, generiert der Server beim Start einen und loggt ihn — fuer
-Produktion solltest du einen festen Wert setzen.
+VoxGate listens on `http://localhost:8000`. If `API_TOKEN` is left
+empty, the server generates one on startup and logs it — for production
+set a stable value.
 
 ## Configuration
 
-Everything is configured via environment variables. With Docker, put them
-in `.env` (the compose file reads it automatically via `env_file`).
+Everything is configured via environment variables. With Docker, put
+them in `.env` (Compose reads it via `env_file`).
 
 ### Required
 
 | Variable | Description |
 |---|---|
-| `API_TOKEN` | Bearer token clients must send. Without it the server refuses to start once a backend is configured. |
+| `API_TOKEN` | Bearer token clients must send. If empty, the server auto-generates one on startup and logs it (per-run). |
 
 Plus at least one backend:
 
@@ -68,25 +68,25 @@ Plus at least one backend:
 | `RATE_LIMIT_PER_MINUTE` | `30` | Requests per IP per minute for `/claude` and `/prompt`. |
 | `SESSION_TTL_SECONDS` | `1800` | Lifetime of an idle session. |
 | `MAX_SESSIONS` | `1000` | Global cap on concurrent sessions. |
-| `TRUST_PROXY_HEADERS` | `0` | Set to `1` behind Caddy/Nginx (X-Forwarded-For). See Reverse-Proxy section. |
+| `TRUST_PROXY_HEADERS` | `0` | Set to `1` behind Caddy/Nginx (X-Forwarded-For). See "Reverse proxy". |
 
-## Reverse-Proxy-Anleitung
+## Reverse proxy
 
-Web Speech API verlangt HTTPS auf Android. Drei Wege:
+Web Speech API requires HTTPS on Android. Three paths:
 
-1. **Caddy-Bundle** — fertig konfiguriert in [`deploy/caddy/`](deploy/caddy/).
-   Empfohlen, wenn du nichts anderes laufen hast.
-2. **Eigenes Caddy/Nginx** vor dem Root-Compose — siehe unten.
-3. **Tunnel** statt eigenem Proxy — siehe naechster Abschnitt.
+1. **Caddy bundle** — preconfigured in [`../deploy/caddy/`](../deploy/caddy/).
+   Recommended if you have nothing else running.
+2. **Your own Caddy/nginx** in front of the root compose — see below.
+3. **Tunnel** instead of a proxy — see the next section.
 
-Voraussetzungen fuer Variante 2:
+Prerequisites for variant 2:
 
-- Server mit freien Ports 80/443 (oder anderen, wenn der Proxy auf
-  anderen Ports lauscht).
-- DNS A/AAAA-Eintrag fuer den gewuenschten Hostname auf den Server.
-- Firewall (z.B. UFW): 80, 443 offen, 8000 *nicht* von aussen erreichbar.
+- Server with free ports 80/443 (or different ones if your proxy
+  listens elsewhere).
+- DNS A/AAAA record for the chosen hostname pointing at the server.
+- Firewall (e.g. UFW): 80, 443 open; 8000 *not* reachable from outside.
 
-### Caddy (eigene Installation)
+### Caddy (manual install)
 
 ```caddy
 # /etc/caddy/Caddyfile
@@ -100,7 +100,7 @@ apt install caddy
 systemctl enable --now caddy
 ```
 
-Caddy holt das Zertifikat automatisch und erneuert es selbststaendig.
+Caddy obtains and renews the certificate automatically.
 
 ### Nginx
 
@@ -129,45 +129,45 @@ server {
 }
 ```
 
-Zertifikat-Renewal mit certbot (`certbot --nginx -d voxgate.example.com`).
-Cron/Timer prueft alle 12 h.
+Cert renewal via certbot (`certbot --nginx -d voxgate.example.com`).
+Cron/timer checks every 12 h.
 
-### Wichtig fuer beide
+### Important for both
 
-- In `.env` setzen: `TRUST_PROXY_HEADERS=1` (damit das Rate-Limit auf
-  die echte Client-IP statt auf die Proxy-IP angewendet wird).
-- In `.env` setzen: `ALLOWED_ORIGIN=https://voxgate.example.com`.
-- **Keine** zusaetzliche `Content-Security-Policy` im Proxy — VoxGate
-  setzt eine strikte CSP selbst.
+- In `.env`: `TRUST_PROXY_HEADERS=1` (so the rate limit applies to the
+  real client IP rather than the proxy IP).
+- In `.env`: `ALLOWED_ORIGIN=https://voxgate.example.com`.
+- **Do not** add a `Content-Security-Policy` header in the proxy —
+  VoxGate sets a strict CSP itself.
 
-## Tunnel davorhaengen
+## Tunnel in front
 
-Wenn du keine eigene Domain hast (oder keine Ports oeffnen willst),
-kannst du VoxGate hinter einen Tunnel-Service haengen. Das HTTPS und der
-Hostname kommen vom Tunnel-Anbieter.
+If you do not have your own domain (or do not want to open ports), put
+VoxGate behind a tunnel service. HTTPS and the hostname come from the
+tunnel provider.
 
 ```
-[Phone] ──HTTPS──► [Tunnel-Anbieter] ──► [VoxGate auf 127.0.0.1:8000]
+[Phone] ──HTTPS──► [Tunnel provider] ──► [VoxGate on 127.0.0.1:8000]
 ```
 
-VoxGate selbst aendert sich nicht — Tunnel zeigt auf `localhost:8000`,
-genau wie ein lokaler Reverse-Proxy.
+VoxGate itself does not change — the tunnel points at `localhost:8000`,
+just like a local reverse proxy.
 
 ### Cloudflare Tunnel
 
 ```bash
-# einmalig einrichten
+# one-time setup
 cloudflared tunnel login
 cloudflared tunnel create voxgate
-# Subdomain auf den Tunnel routen
+# route a subdomain through the tunnel
 cloudflared tunnel route dns voxgate voxgate.example.com
-# Service starten — VoxGate muss auf 127.0.0.1:8000 lauschen
+# run the tunnel — VoxGate must listen on 127.0.0.1:8000
 cloudflared tunnel run --url http://localhost:8000 voxgate
 ```
 
-Setup-Doku: <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/>.
+Setup docs: <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/>.
 
-In `.env`: `TRUST_PROXY_HEADERS=1` und `ALLOWED_ORIGIN=https://voxgate.example.com`.
+In `.env`: `TRUST_PROXY_HEADERS=1` and `ALLOWED_ORIGIN=https://voxgate.example.com`.
 
 ### Tailscale Funnel
 
@@ -177,9 +177,9 @@ tailscale serve https / http://localhost:8000
 tailscale funnel 443 on
 ```
 
-Setup-Doku: <https://tailscale.com/kb/1223/funnel>.
+Setup docs: <https://tailscale.com/kb/1223/funnel>.
 
-In `.env`: `TRUST_PROXY_HEADERS=1` und
+In `.env`: `TRUST_PROXY_HEADERS=1` and
 `ALLOWED_ORIGIN=https://<machine>.<tailnet>.ts.net`.
 
 ## Multi-instance (advanced)
@@ -187,7 +187,7 @@ In `.env`: `TRUST_PROXY_HEADERS=1` und
 Several VoxGate instances on the same host — for example a green PWA
 "Claude" (direct Anthropic) and a blue PWA "Dokbot" (forwards to a
 custom backend). Each instance is its own container with its own port,
-env vars and PWA icon.
+env vars, and PWA icon.
 
 Replace the single-service `docker-compose.yml` with one block per
 instance, e.g.:
@@ -274,12 +274,12 @@ For multiple instances, copy the unit (`voxgate-claude.service`,
 
 ## Custom backend for `/prompt`
 
-Backend-Vertrag und Beispiele (Python/FastAPI mit Claude-CLI,
-Node/Express, Bash-Stub, Browser-Client): [`docs/backends.md`](docs/backends.md).
+Backend contract and examples (Python/FastAPI with Claude CLI,
+Node/Express, bash stub, browser client): [`backends.md`](backends.md).
 
 ## Security
 
-Operator-Checkliste vor dem Public-Deploy: [`SECURITY.md`](SECURITY.md).
+Operator checklist before the public deploy: [`security.md`](security.md).
 
 ## Scaling & deployment constraints
 
@@ -294,11 +294,11 @@ The shipped `Dockerfile` and `docker-compose.yml` start a single worker
 
 ### Why scale at all?
 
-Three typical motives — none of them currently pressing for VoxGate:
+Three typical motives — none currently pressing for VoxGate:
 
-1. **CPU utilization.** Python's GIL limits one process to one CPU core.
-   Multiple workers can use multiple cores. Not relevant here: the
-   server is I/O-bound (it just waits for the Anthropic API).
+1. **CPU utilization.** Python's GIL limits one process to one CPU
+   core. Multiple workers can use multiple cores. Not relevant here:
+   the server is I/O-bound (it just waits for the Anthropic API).
 2. **Throughput / concurrent users.** Many simultaneously active
    sessions could saturate one worker. A personal or family-sized
    installation will never hit this.
@@ -325,4 +325,4 @@ Redis is the standard choice. Adds a dependency and requires reworking
 - **Logs:** `docker compose logs -f` or `journalctl -u voxgate -f`
 - **Update:** `git pull && docker compose build && docker compose up -d`
 - **Sessions:** kept in memory; lost on restart. Intentional.
-- **Anthropic costs:** monitor at console.anthropic.com, set spending limits.
+- **Anthropic costs:** monitor at console.anthropic.com; set spending limits.
