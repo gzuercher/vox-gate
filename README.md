@@ -136,7 +136,8 @@ The rest is reference material for developers and clients calling the
 HTTP API. For installation/operation see [`docs/setup.md`](docs/setup.md).
 For the security checklist see [`docs/security.md`](docs/security.md).
 For backend examples see [`docs/backends.md`](docs/backends.md). For
-contributing see [`docs/contributing.md`](docs/contributing.md).
+contributing see [`docs/contributing.md`](docs/contributing.md). For
+where the project might go next see [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Architecture
 
@@ -224,6 +225,7 @@ voxgate/
 │   ├── security.md        # Operator checklist
 │   ├── contributing.md    # Development workflow
 │   ├── backends.md        # /prompt and /claude examples
+│   ├── roadmap.md         # Future-development ideas
 │   └── lessons.md         # Lessons learned
 ├── .claude/rules/         # Code rules for Claude Code
 ├── .env.example           # Configuration template (api-only, root)
