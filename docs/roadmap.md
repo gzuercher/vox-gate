@@ -127,18 +127,6 @@ VoxGate is. Listed for discussion, not commitment.
   account UI. VoxGate stops being a single-tenant tool. Big philosophy
   break — only do this if it's clearly the new product.
 
-### Plugin / skill ecosystem
-- **Value:** community-contributed integrations (calendar, todo, home
-  automation) without central maintenance.
-- **Cost:** plugin protocol, sandboxing, versioning, distribution.
-  This is "VoxGate becomes a platform" territory. MCP-bridge (Horizon
-  2) is the lighter version of the same idea.
-
-### Hosted SaaS offering
-- **Value:** zero-setup option for non-technical users.
-- **Cost:** abuse handling, payment, GDPR, on-call. A different
-  business, not a feature.
-
 ---
 
 ## Deliberately not planned
@@ -172,6 +160,14 @@ why:
   reply quality), different audience, and a completely separate
   ops-and-update treadmill. If this is ever wanted, it is a sibling
   project ("VoxGate Local"), not a flag inside this one.
+- **Plugin / skill ecosystem.** Plugin protocols, sandboxing,
+  versioning, and distribution would turn VoxGate into a platform.
+  Custom capabilities belong in the user's `/prompt` backend, where
+  they can be as small or as elaborate as needed without VoxGate
+  carrying the maintenance.
+- **Hosted SaaS offering.** Abuse handling, payment, GDPR, on-call —
+  that is a different business, not a feature. VoxGate stays a thing
+  you self-host.
 
 ---
 
