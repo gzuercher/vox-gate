@@ -1,25 +1,58 @@
 # Roadmap
 
 Living document — ideas for future development. Nothing here is a
-commitment; the further down a horizon, the more uncertain. Each entry
-has a rough **value** (why bother) and **cost/risk** (why it might
-hurt).
+commitment. Each entry has a rough **value** (why bother) and
+**cost/risk** (why it might hurt).
 
-The goal of VoxGate is to stay a small, dependency-light voice gateway.
-That principle constrains the roadmap as much as it shapes it.
+The goal of VoxGate is to stay a small, dependency-light voice
+gateway. The current focus is to take VoxGate into **productive use**
+and learn from real usage. Items are grouped by priority, not by
+estimated time:
+
+- **Höher** — clear value for productive use; pick from here first.
+- **Normal** — useful, but not a precondition for productive use.
+- **Deliberately not planned** — explicit rejections, with reasons.
 
 ---
 
-## Horizon 1 — near-term (weeks)
-
-Small, well-defined improvements that fit the existing architecture.
+## Höher
 
 ### Streaming responses (SSE)
 - **Value:** Claude replies start playing/showing within ~500 ms instead
-  of after the full response. Big perceived-latency win.
+  of after the full response. The single biggest perceived-quality win
+  in the document — without it VoxGate feels noticeably slower than
+  ChatGPT-style apps, and the gap grows with longer answers.
 - **Cost:** server: switch `/claude` to SSE; PWA: incremental TTS plus
-  text accumulation. Modest. The tricky part is making `speechSynthesis`
-  speak partial sentences without sounding chopped.
+  text accumulation. Modest. The tricky part is making
+  `speechSynthesis` speak partial sentences without sounding chopped.
+
+### Multi-token support (named keys)
+- **Value:** today there is one shared `API_TOKEN`. Adding named keys
+  (`API_TOKENS=alice:xxx,bob:yyy`) enables per-user revocation and
+  per-user audit-log entries — directly relevant for productive use
+  in a small group.
+- **Cost:** small server change, but breaking for the `/config` and
+  setup story. Keep single-token mode as default to not disrupt
+  existing users.
+
+### iOS Safari minimum support
+- **Value:** unblock iPhone users who currently get a half-broken UX
+  (Web Speech API is limited).
+- **Cost:** at minimum: detect Safari, show a clear "open in Chrome"
+  banner instead of silently failing. Going further (server-side STT
+  fallback) is a separate item under Normal.
+
+### Image / camera input
+- **Value:** point phone camera at something, ask Claude about it.
+  Multimodal is one of Claude's strengths and currently unused. Phone
+  camera is the natural use case for a voice gateway on the phone.
+- **Cost:** UI: capture button + preview. Server: image upload, base64
+  encode for Anthropic API. Privacy considerations (where does the
+  image live, audit log, etc.).
+
+---
+
+## Normal
 
 ### Conversation history persistence (per session, per user)
 - **Value:** restart no longer wipes ongoing threads. Phone reload
@@ -38,32 +71,11 @@ Small, well-defined improvements that fit the existing architecture.
   security checklist gains a new item ("if `SESSION_STORE=sqlite`,
   back up and protect `/data/sessions.db` like personal data").
 
-### Multi-token support (named keys)
-- **Value:** today there is one shared `API_TOKEN`. Adding named keys
-  (`API_TOKENS=alice:xxx,bob:yyy`) enables per-user revocation and
-  per-user audit-log entries.
-- **Cost:** small server change, but breaking for the `/config` and
-  setup story. Keep single-token mode as default to not disrupt
-  existing users.
-
-### iOS Safari minimum support
-- **Value:** unblock iPhone users who currently get a half-broken UX
-  (Web Speech API is limited).
-- **Cost:** at minimum: detect Safari, show a clear "open in Chrome"
-  banner instead of silently failing. Going further (server-side STT
-  fallback) is Horizon 2.
-
 ### Configurable system-prompt presets
 - **Value:** quickly switch between "concise assistant", "language
   tutor", "pirate" etc. without rebuilding the container.
 - **Cost:** UI: small dropdown next to the language toggle. Server:
   `SYSTEM_PROMPTS` env as named map. Cheap; fits the spirit.
-
----
-
-## Horizon 2 — mid-term (months)
-
-Larger work that introduces new dependencies or changes the surface.
 
 ### Server-side STT fallback (Whisper)
 - **Value:** unlocks iOS/Safari and any browser with weak Web Speech
@@ -79,20 +91,13 @@ Larger work that introduces new dependencies or changes the surface.
 - **Cost:** another external dependency, another API key, latency, per-
   request cost. Streaming support needed to keep perceived speed.
 
-### Image / camera input
-- **Value:** point phone camera at something, ask Claude about it.
-  Multimodal is one of Claude's strengths and currently unused.
-- **Cost:** UI: capture button + preview. Server: image upload, base64
-  encode for Anthropic API. Privacy considerations (where does the
-  image live, audit log, etc.).
-
 ### Conversation export and search
 - **Value:** voice conversations are ephemeral by default; users may
   want to revisit, share, export to markdown. Search across past
   conversations.
-- **Cost:** depends on persistence (Horizon 1 prerequisite). Search at
-  trivial scale is `LIKE %query%`; at non-trivial scale needs FTS5 or
-  similar.
+- **Cost:** depends on conversation persistence (above) being shipped
+  first. Search at trivial scale is `LIKE %query%`; at non-trivial
+  scale needs FTS5 or similar.
 
 ### Edge-pre-auth bundle
 - **Value:** ship `deploy/caddy-private/` with Basic Auth or
@@ -100,13 +105,6 @@ Larger work that introduces new dependencies or changes the surface.
   pattern, removes guesswork.
 - **Cost:** more bundles to maintain. Decide carefully whether docs
   alone (current state) are enough.
-
----
-
-## Horizon 3 — vision / aspirational
-
-Direction the project *could* take but each point would change what
-VoxGate is. Listed for discussion, not commitment.
 
 ### Native mobile apps (iOS/Android)
 - **Value:** access to platform STT (Apple's, Google's), better
@@ -173,8 +171,8 @@ why:
 
 ## How to use this document
 
-1. When picking work, prefer Horizon 1 unless there is an explicit
-   reason to jump higher.
+1. When picking work, prefer **Höher** over Normal unless there is an
+   explicit reason to jump.
 2. Before starting any item, write a short plan (in
    `~/.claude/plans/` or as a GitHub issue) — the roadmap entry is
    not a spec.
@@ -182,3 +180,7 @@ why:
    record why. Stale items rot the document.
 4. Add new ideas with the same value/cost framing. Vague ideas
    ("better UX") have no place here — be concrete.
+5. If a Normal entry's own cost note disqualifies it ("would change
+   what VoxGate is", "different business", "platform territory"), it
+   does not belong on the roadmap — move it to *Deliberately not
+   planned* or remove it.
