@@ -25,8 +25,18 @@ Small, well-defined improvements that fit the existing architecture.
 - **Value:** restart no longer wipes ongoing threads. Phone reload
   doesn't lose context.
 - **Cost:** persist `_sessions` to disk (SQLite or a JSON file in a
-  mounted volume). Requires a volume in compose. Touches the in-memory
-  contract that the README/docs currently advertise as a feature.
+  mounted volume). Requires a mounted volume in compose.
+- **Constraint — opt-in only:** the README, `docs/setup.md`, and
+  `docs/security.md` currently advertise "nothing is persisted" as an
+  intentional property (no disk leak, no backup duty, no GDPR storage
+  obligation). Persistence must therefore ship behind an env switch,
+  e.g. `SESSION_STORE=memory|sqlite` with `memory` as the default.
+  Existing users keep the original contract; opt-in users accept the
+  new one.
+- **Doc updates required when shipped:** the three "intentional, lost
+  on restart" passages must be rewritten to describe both modes. The
+  security checklist gains a new item ("if `SESSION_STORE=sqlite`,
+  back up and protect `/data/sessions.db` like personal data").
 
 ### Multi-token support (named keys)
 - **Value:** today there is one shared `API_TOKEN`. Adding named keys
