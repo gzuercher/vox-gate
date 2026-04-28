@@ -1,3 +1,12 @@
+# Local development setup: VoxGate is exposed directly on :8000, no TLS,
+# no reverse proxy. Do NOT use this in production — for a public deployment
+# with TLS and a reverse proxy in front, use deploy/caddy/docker-compose.yml
+# (which also enables TRUST_PROXY_HEADERS=1). Setting that flag here would
+# allow clients to spoof X-Forwarded-For and forge their IP in logs.
+#
+# To run multiple instances side by side (e.g. one for direct Claude, one
+# forwarding to a custom backend), see the "Multi-instance" section in
+# docs/setup.md.
 services:
   voxgate:
     build: .
@@ -7,7 +16,3 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
-
-# To run multiple instances side by side (e.g. one for direct Claude,
-# one forwarding to a custom backend), see the "Multi-instance" section
-# in docs/setup.md.

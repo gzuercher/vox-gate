@@ -25,6 +25,9 @@ API_TOKEN = os.environ.get("API_TOKEN", "")
 TARGET_URL = os.environ.get("TARGET_URL", "")
 TARGET_TOKEN = os.environ.get("TARGET_TOKEN", "")
 INSTANCE_NAME = os.environ.get("INSTANCE_NAME", "VoxGate")
+# Human-friendly title shown in the UI (header, browser tab). Falls back to
+# INSTANCE_NAME, which is normally a technical identifier (e.g. "ZPlanVox-DE").
+INSTANCE_DISPLAY_NAME = os.environ.get("INSTANCE_DISPLAY_NAME", "").strip() or INSTANCE_NAME
 INSTANCE_COLOR = os.environ.get("INSTANCE_COLOR", "#c8ff00")
 SPEECH_LANG = os.environ.get("SPEECH_LANG", "de-CH")
 SPEECH_LANGS = [
@@ -183,7 +186,7 @@ class ClaudeRequest(BaseModel):
 @app.get("/config")
 async def get_config():
     return {
-        "name": INSTANCE_NAME,
+        "name": INSTANCE_DISPLAY_NAME,
         "color": INSTANCE_COLOR,
         "lang": SPEECH_LANG,
         "langs": SPEECH_LANGS,

@@ -1,6 +1,64 @@
   let instanceConfig = { name: 'VoxGate', color: '#c8ff00', lang: 'de-CH', langs: ['de-CH', 'fr-CH'], maxLength: 4000 };
+
+  const I18N = {
+    'de-CH': {
+      langName: 'Deutsch',
+      headerToggleLang: 'Sprache umschalten',
+      headerToggleAuth: 'Zugangsschlüssel ändern',
+      headerToggleMute: 'Sprachausgabe stummschalten',
+      authTitle: 'Zugang',
+      authIntro: 'Diese Instanz ist privat. Gib den Zugangsschlüssel ein, den du vom Betreiber erhalten hast.',
+      authLabel: 'Zugangsschlüssel',
+      authError: 'Zugang verweigert. Schlüssel prüfen.',
+      authSubmit: 'Speichern',
+      authHint: 'Wird nur lokal auf diesem Gerät gespeichert.',
+      emptyTitle: 'Tippen und sprechen',
+      emptyHint: 'Nochmal tippen = senden',
+      transcriptReady: 'Bereit...',
+      micAria: 'Aufnehmen und senden',
+      discardAria: 'Aufnahme verwerfen',
+      micRecord: 'Aufnehmen',
+      micStop: 'Stop',
+      micSend: 'Senden',
+      newConv: 'Neues Gespräch',
+      userLabel: 'Du',
+      errorPrefix: 'Fehler: ',
+      speechUnsupported: 'Web Speech API wird nicht unterstützt. Bitte Chrome verwenden.',
+    },
+    'fr-CH': {
+      langName: 'Français',
+      headerToggleLang: 'Changer de langue',
+      headerToggleAuth: "Modifier la clé d'accès",
+      headerToggleMute: 'Couper la synthèse vocale',
+      authTitle: 'Accès',
+      authIntro: "Cette instance est privée. Saisissez la clé d'accès reçue de l'exploitant.",
+      authLabel: "Clé d'accès",
+      authError: 'Accès refusé. Vérifiez la clé.',
+      authSubmit: 'Enregistrer',
+      authHint: 'Stocké uniquement sur cet appareil.',
+      emptyTitle: 'Touchez et parlez',
+      emptyHint: 'Touchez à nouveau pour envoyer',
+      transcriptReady: 'Prêt...',
+      micAria: 'Enregistrer et envoyer',
+      discardAria: "Annuler l'enregistrement",
+      micRecord: 'Enregistrer',
+      micStop: 'Arrêter',
+      micSend: 'Envoyer',
+      newConv: 'Nouvelle conversation',
+      userLabel: 'Moi',
+      errorPrefix: 'Erreur : ',
+      speechUnsupported: 'Web Speech API non supportée. Utilisez Chrome.',
+    },
+  };
+
+  function t(key) {
+    const dict = I18N[activeLang()] || I18N['de-CH'];
+    return dict[key] !== undefined ? dict[key] : key;
+  }
   let recognition = null;
-  let isRecording = false;
+  // 'idle': waiting for user. 'recording': SpeechRecognition active.
+  // 'review': recording stopped, transcript editable, next tap sends.
+  let state = 'idle';
   let currentTranscript = '';
   let finalTranscript = '';
   function supportedLangs() {
@@ -34,6 +92,7 @@
   const langBtn = document.getElementById('langBtn');
   const muteBtn = document.getElementById('muteBtn');
   const newConvBtn = document.getElementById('newConvBtn');
+  const discardBtn = document.getElementById('discardBtn');
   const authOverlay = document.getElementById('authOverlay');
   const authForm = document.getElementById('authForm');
   const tokenInput = document.getElementById('tokenInput');
@@ -65,8 +124,25 @@
     showAuthOverlay(false);
   }
 
-  function updateLangBtn() {
-    langBtn.textContent = activeLang().toUpperCase();
+  function applyLang() {
+    const lang = activeLang();
+    document.documentElement.lang = lang.split('-')[0];
+    langBtn.textContent = t('langName');
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+      el.setAttribute('aria-label', t(el.dataset.i18nAria));
+    });
+    // Re-apply state-dependent labels.
+    if (state === 'idle') {
+      micLabel.textContent = t('micRecord');
+      transcriptBox.textContent = t('transcriptReady');
+    } else if (state === 'recording') {
+      micLabel.textContent = t('micStop');
+    } else if (state === 'review') {
+      micLabel.textContent = t('micSend');
+    }
   }
 
   function updateMuteBtn() {
@@ -81,8 +157,8 @@
     const next = langs[(idx + 1) % langs.length] || langs[0];
     currentLang = next;
     localStorage.setItem('voxLang', next);
-    updateLangBtn();
-    if (isRecording) stopRecording();
+    if (state !== 'idle') discardReview();
+    applyLang();
   });
 
   muteBtn.addEventListener('click', () => {
@@ -93,12 +169,15 @@
   });
 
   newConvBtn.addEventListener('click', () => {
+    if (state !== 'idle') discardReview();
     sessionId = (crypto.randomUUID ? crypto.randomUUID()
       : Date.now() + '-' + Math.random().toString(36).slice(2));
     sessionStorage.setItem('voxSession', sessionId);
     messagesEl.innerHTML = '';
     if ('speechSynthesis' in window) speechSynthesis.cancel();
   });
+
+  discardBtn.addEventListener('click', () => discardReview());
 
   function speak(text) {
     if (muted || !('speechSynthesis' in window) || !text) return;
@@ -130,7 +209,7 @@
   }
 
   function updateTranscript(text, active) {
-    transcriptBox.textContent = text || 'Bereit...';
+    transcriptBox.textContent = text || t('transcriptReady');
     transcriptBox.className = 'transcript-box' + (active ? ' active' : '');
   }
 
@@ -140,7 +219,7 @@
 
     const div = document.createElement('div');
     div.className = 'message ' + role;
-    const label = role === 'user' ? 'Du' : instanceConfig.name;
+    const label = role === 'user' ? t('userLabel') : instanceConfig.name;
     div.innerHTML = `
       <div class="message-label">${escapeHtml(label)}</div>
       <div class="message-bubble">${escapeHtml(text)}</div>
@@ -157,16 +236,38 @@
   micBtn.addEventListener('click', () => handleTap());
 
   function handleTap() {
-    if (isRecording) {
-      stopAndSend();
-    } else {
+    if (state === 'idle') {
       startRecording();
+    } else if (state === 'recording') {
+      enterReview();
+    } else if (state === 'review') {
+      sendCurrent();
+    }
+  }
+
+  function setState(next) {
+    state = next;
+    micBtn.classList.toggle('recording', next === 'recording');
+    if (next === 'idle') {
+      micLabel.textContent = t('micRecord');
+      transcriptBox.removeAttribute('contenteditable');
+      discardBtn.hidden = true;
+      updateTranscript('', false);
+    } else if (next === 'recording') {
+      micLabel.textContent = t('micStop');
+      transcriptBox.removeAttribute('contenteditable');
+      discardBtn.hidden = true;
+    } else if (next === 'review') {
+      micLabel.textContent = t('micSend');
+      transcriptBox.setAttribute('contenteditable', 'true');
+      transcriptBox.classList.remove('active');
+      discardBtn.hidden = false;
     }
   }
 
   function startRecording() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Web Speech API not supported. Use Chrome.');
+      alert(t('speechUnsupported'));
       return;
     }
 
@@ -182,9 +283,7 @@
     currentTranscript = '';
 
     recognition.onstart = () => {
-      isRecording = true;
-      micBtn.classList.add('recording');
-      micLabel.textContent = 'Senden';
+      setState('recording');
       updateTranscript('', true);
       setStatus('online');
     };
@@ -204,7 +303,9 @@
     };
 
     recognition.onend = () => {
-      if (isRecording) {
+      // Continuous-mode workaround: some browsers fire onend mid-session.
+      // Only restart if we are still recording.
+      if (state === 'recording') {
         recognition.start();
       }
     };
@@ -212,36 +313,61 @@
     recognition.onerror = (e) => {
       if (e.error === 'no-speech') return;
       console.error(e.error);
-      stopRecording();
+      stopRecognition();
+      setState('idle');
       setStatus('error');
     };
 
     recognition.start();
   }
 
-  function stopRecording() {
-    isRecording = false;
+  function stopRecognition() {
     if (recognition) {
       recognition.onend = null;
-      recognition.stop();
+      try { recognition.stop(); } catch (_) {}
     }
-    micBtn.classList.remove('recording');
-    micLabel.textContent = 'Aufnehmen';
   }
 
-  async function stopAndSend() {
+  function enterReview() {
+    stopRecognition();
     const text = currentTranscript.trim();
-    stopRecording();
-
     if (!text) {
-      updateTranscript('', false);
+      setState('idle');
       return;
     }
+    setState('review');
+    transcriptBox.textContent = text;
+    setStatus('');
+    setTimeout(() => {
+      transcriptBox.focus();
+      const range = document.createRange();
+      range.selectNodeContents(transcriptBox);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }, 50);
+  }
 
-    addMessage('user', text);
+  function discardReview() {
+    stopRecognition();
     currentTranscript = '';
     finalTranscript = '';
-    updateTranscript('', false);
+    setState('idle');
+    setStatus('');
+  }
+
+  async function sendCurrent() {
+    const text = (transcriptBox.textContent || '').trim();
+    setState('idle');
+    currentTranscript = '';
+    finalTranscript = '';
+    if (!text) return;
+    await sendText(text);
+  }
+
+  async function sendText(text) {
+    addMessage('user', text);
 
     const typingDiv = addMessage('assistant', '');
     typingDiv.classList.add('typing');
@@ -275,14 +401,14 @@
       speak(reply);
     } catch (err) {
       typingDiv.classList.remove('typing');
-      typingDiv.querySelector('.message-bubble').textContent = 'Fehler: ' + err.message;
+      typingDiv.querySelector('.message-bubble').textContent = t('errorPrefix') + err.message;
       setStatus('error');
     }
 
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  updateLangBtn();
+  applyLang();
   updateMuteBtn();
-  loadConfig().then(updateLangBtn);
+  loadConfig().then(applyLang);
   setStatus('');

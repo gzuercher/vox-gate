@@ -13,23 +13,23 @@
 <body>
 
 <header>
-  <button class="header-btn" id="langBtn" aria-label="Sprache umschalten">DE-CH</button>
+  <button class="header-btn" id="langBtn" data-i18n-aria="headerToggleLang" aria-label="Sprache umschalten">Deutsch</button>
   <div class="header-center">
-    <button class="logo logo-btn" id="logo" aria-label="Zugangsschlüssel ändern">VoxGate</button>
+    <button class="logo logo-btn" id="logo" data-i18n-aria="headerToggleAuth" aria-label="Zugangsschlüssel ändern">VoxGate</button>
   </div>
-  <button class="header-btn" id="muteBtn" aria-label="Sprachausgabe stummschalten">🔊</button>
+  <button class="header-btn" id="muteBtn" data-i18n-aria="headerToggleMute" aria-label="Sprachausgabe stummschalten">🔊</button>
   <div class="status-dot" id="statusDot"></div>
 </header>
 
 <div class="auth-overlay" id="authOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="authTitle">
   <form class="auth-card" id="authForm" autocomplete="off">
-    <h2 id="authTitle">Zugang</h2>
-    <p>Diese Instanz ist privat. Gib den Zugangsschlüssel ein, den du vom Betreiber erhalten hast.</p>
-    <label for="tokenInput" class="auth-label">Zugangsschlüssel</label>
+    <h2 id="authTitle" data-i18n="authTitle">Zugang</h2>
+    <p data-i18n="authIntro">Diese Instanz ist privat. Gib den Zugangsschlüssel ein, den du vom Betreiber erhalten hast.</p>
+    <label for="tokenInput" class="auth-label" data-i18n="authLabel">Zugangsschlüssel</label>
     <input type="password" id="tokenInput" name="token" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required>
-    <p class="auth-error" id="authError" hidden>Zugang verweigert. Schlüssel prüfen.</p>
-    <button type="submit" class="auth-submit">Speichern</button>
-    <p class="auth-hint">Wird nur lokal auf diesem Gerät gespeichert.</p>
+    <p class="auth-error" id="authError" data-i18n="authError" hidden>Zugang verweigert. Schlüssel prüfen.</p>
+    <button type="submit" class="auth-submit" data-i18n="authSubmit">Speichern</button>
+    <p class="auth-hint" data-i18n="authHint">Wird nur lokal auf diesem Gerät gespeichert.</p>
   </form>
 </div>
 
@@ -39,23 +39,26 @@
       <rect x="9" y="2" width="6" height="13" rx="3"/>
       <path d="M5 10 C5 16 19 16 19 10"/><line x1="12" y1="16" x2="12" y2="20"/><line x1="8" y1="20" x2="16" y2="20"/>
     </svg>
-    <span>Tippen und sprechen</span>
-    <span class="empty-hint">Nochmal tippen = senden</span>
+    <span data-i18n="emptyTitle">Tippen und sprechen</span>
+    <span class="empty-hint" data-i18n="emptyHint">Nochmal tippen = senden</span>
   </div>
 </main>
 
 <footer>
-  <div class="transcript-box" id="transcriptBox" aria-live="polite">Bereit...</div>
-  <button class="mic-btn" id="micBtn" aria-label="Record and send">
-    <span class="mic-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <rect x="9" y="2" width="6" height="13" rx="3"/>
-        <path d="M5 10 C5 16 19 16 19 10"/><line x1="12" y1="16" x2="12" y2="20"/><line x1="8" y1="20" x2="16" y2="20"/>
-      </svg>
-    </span>
-    <span id="micLabel">Aufnehmen</span>
-  </button>
-  <button class="new-conv-btn" id="newConvBtn">Neues Gespräch</button>
+  <div class="transcript-box" id="transcriptBox" aria-live="polite" spellcheck="false">Bereit...</div>
+  <div class="action-row">
+    <button class="discard-btn" id="discardBtn" type="button" data-i18n-aria="discardAria" aria-label="Aufnahme verwerfen" hidden>✕</button>
+    <button class="mic-btn" id="micBtn" data-i18n-aria="micAria" aria-label="Aufnehmen und senden">
+      <span class="mic-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="9" y="2" width="6" height="13" rx="3"/>
+          <path d="M5 10 C5 16 19 16 19 10"/><line x1="12" y1="16" x2="12" y2="20"/><line x1="8" y1="20" x2="16" y2="20"/>
+        </svg>
+      </span>
+      <span id="micLabel">Aufnehmen</span>
+    </button>
+  </div>
+  <button class="new-conv-btn" id="newConvBtn" data-i18n="newConv">Neues Gespräch</button>
 </footer>
 
 <script src="app.js"></script>
