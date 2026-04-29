@@ -84,34 +84,38 @@ again while audio is playing, the current speech is cancelled.
 ## Installing the PWA on your phone
 
 1. Open Chrome on Android → `https://your-voxgate-host`.
-2. The first screen asks for an **access key**. Paste the
-   `API_TOKEN` your operator gave you — it is stored only in this
-   browser's `localStorage`.
+2. The first screen offers **Sign in with Google**. Use a Google
+   account that the operator has added to `ALLOWED_EMAILS`. The login
+   produces a server-signed, `HttpOnly` session cookie — no token is
+   stored in the browser.
 3. Three-dot menu → "Add to Home screen".
 4. The app now opens like any other app, with its own icon and color.
 
 If you deploy multiple instances on different hostnames, repeat for
 each — every URL becomes its own PWA with its own color.
 
-To change the access key later, tap the **VoxGate logo** in the header.
+To switch accounts or sign out, tap the **VoxGate logo** in the header.
 
-## Access keys (operator + user)
+## Access (operator + user)
 
-VoxGate is single-tenant: every authorized device holds the same
-`API_TOKEN`. The PWA prompts for it on first start and on any 401
-response. Practical guidance:
+VoxGate authenticates users via **Google Sign-In**. The operator lists
+permitted Google accounts in `ALLOWED_EMAILS`; everybody else is
+rejected at login. Practical guidance:
 
-- **Set a stable `API_TOKEN`** in `.env` before sharing the URL — the
-  auto-generated, per-restart token is fine for development but breaks
-  every client on every container restart.
-- **Distribute the token through a confidential channel** (Signal,
-  password manager, in person). Do not put it in the URL.
-- **Token rotation:** change `API_TOKEN` in `.env`, restart, then have
-  every user re-enter the new key. The PWA shows the prompt
-  automatically because the next call returns 401.
-- **Lost device:** rotate the token. There is no per-device revocation
-  by design — VoxGate trades that simplicity for being a tiny,
-  dependency-free service.
+- **Set `GOOGLE_CLIENT_ID` and `ALLOWED_EMAILS`** in `.env` before
+  sharing the URL.
+- **Set a stable `SESSION_SECRET`** so sessions survive container
+  restarts. The auto-generated, per-restart secret is fine for
+  development but logs everyone out on every restart.
+- **Granting access:** add the user's Google e-mail to
+  `ALLOWED_EMAILS`. Takes effect on the next request — no restart.
+- **Revoking access:** remove the e-mail from `ALLOWED_EMAILS`. The
+  next request from that user's session returns 403, which kicks the
+  PWA back to the login screen.
+- **Lost device:** the device's session cookie remains valid until its
+  TTL expires (`SESSION_COOKIE_TTL_SECONDS`, default 7 days) or until
+  the e-mail is revoked. For immediate revocation, remove the e-mail
+  from the allowlist.
 
 Edge-level pre-auth (HTTP Basic Auth in your reverse proxy, Cloudflare
 Access, Tailscale-only access) is independently possible — see
@@ -124,7 +128,8 @@ Access, Tailscale-only access) is independently possible — see
 |---|---|
 | Mic doesn't react | Grant permission in the browser. On Android the page must be HTTPS. |
 | No speech output | Check the speaker button. iOS has limited Web Speech support. |
-| `401` error | Access key missing or wrong. Tap the VoxGate logo to re-enter; the PWA also prompts automatically on the next request. |
+| `401` error | Session expired or missing. The PWA shows the Google Sign-In screen automatically. |
+| `403` error | Your Google account is not in `ALLOWED_EMAILS` (ask the operator) or your session was revoked. |
 | `429` error | Rate limit hit. Wait and retry. |
 | `503` on `/claude` | Anthropic backend not configured — set `ANTHROPIC_API_KEY`. |
 | Conversation suddenly "forgets" | Server restart — sessions are in-memory by design. |
@@ -162,11 +167,20 @@ The server exposes two endpoints:
 
 ## API reference
 
+All authenticated endpoints require:
+
+- the `vg_session` cookie (set by `POST /auth/login/{provider}`),
+- a matching `X-CSRF-Token` header echoing the `vg_csrf` cookie.
+
+The PWA handles both transparently. For programmatic access, log in
+through `POST /auth/login/google` first and reuse the cookie jar.
+
 ### `POST /claude`
 
 ```json
 POST /claude
-Authorization: Bearer <API_TOKEN>
+Cookie: vg_session=…; vg_csrf=…
+X-CSRF-Token: <value of vg_csrf>
 Content-Type: application/json
 
 {
@@ -184,7 +198,8 @@ per session are kept in memory; older ones are dropped in pairs.
 
 ```json
 POST /prompt
-Authorization: Bearer <API_TOKEN>
+Cookie: vg_session=…; vg_csrf=…
+X-CSRF-Token: <value of vg_csrf>
 Content-Type: application/json
 
 { "text": "Hello backend" }
@@ -198,8 +213,23 @@ VoxGate forwards to `TARGET_URL` and expects JSON with a `response`
 Returns instance configuration for the PWA. No auth.
 
 ```json
-{ "name": "Claude", "color": "#c8ff00", "lang": "de-CH", "maxLength": 4000 }
+{ "name": "Claude", "color": "#c8ff00", "lang": "de-CH", "maxLength": 4000,
+  "googleClientId": "123-abc.apps.googleusercontent.com",
+  "providers": ["google"] }
 ```
+
+### Auth endpoints
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /auth/login/{provider}` | none — Origin-checked when `ALLOWED_ORIGIN` is set | Exchange a provider ID token for a VoxGate session. Body: `{"id_token": "..."}`. Today only `provider=google` is registered; unknown providers return 404. Sets `vg_session` (HttpOnly) and `vg_csrf` cookies. |
+| `POST /auth/logout` | session cookie + CSRF (when logged in) | Clears both cookies. Idempotent: if no session is present, returns 200 without requiring CSRF. |
+| `GET /auth/me` | session cookie | Returns `{"email": "...", "provider": "..."}` for the signed-in user, or 401 if no valid session. Re-runs the allowlist check, so a revoked user gets 403 even with a still-valid cookie. |
+| `GET /auth/providers` | none | Returns `{"providers": ["google", ...]}` — the identity providers configured for this instance. |
+
+The `ALLOWED_EMAILS` env var accepts entries like `alice@example.com`
+(any configured provider acceptable) or `alice@example.com:google`
+(only via Google). Useful once a second provider is registered.
 
 ### Errors
 

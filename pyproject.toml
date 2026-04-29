@@ -7,6 +7,8 @@ dependencies = [
     "uvicorn>=0.20",
     "httpx>=0.25",
     "anthropic>=0.40",
+    "google-auth>=2.30",
+    "itsdangerous>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -15,6 +17,10 @@ dev = [
     "httpx>=0.25",
     "ruff>=0.4",
 ]
+
+[tool.setuptools]
+py-modules = ["server"]
+packages = ["auth"]
 
 [tool.ruff]
 target-version = "py310"

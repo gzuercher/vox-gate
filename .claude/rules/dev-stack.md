@@ -31,6 +31,6 @@ Check every change before reporting it as done:
 
 | Topic | Use instead |
 |---|---|
-| Auth/Login | Bearer token via `API_TOKEN` env var |
-| Password hashing | Not applicable (token-based) |
+| Auth/Login | Google Sign-In with allowlist (`GOOGLE_CLIENT_ID` + `ALLOWED_EMAILS`) |
+| Password hashing | Not applicable (identity provider handles credentials) |
 | Input validation | Pydantic `Field` constraints |

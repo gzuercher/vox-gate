@@ -27,15 +27,10 @@ docker compose logs -f caddy
 docker compose logs -f voxgate
 ```
 
-Once `voxgate` logs a token (or you set one yourself in `.env`), open
-`https://voxgate.example.com` in the browser and in the DevTools
-console run:
-
-```js
-localStorage.apiToken = "<token>"
-```
-
-After that you can install the PWA ("Add to Home screen").
+Open `https://voxgate.example.com` in the browser. The PWA shows a
+**Sign in with Google** button. Use a Google account that you added to
+`ALLOWED_EMAILS` in `.env`. After login you can install the PWA
+("Add to Home screen").
 
 ## Customisation
 

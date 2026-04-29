@@ -21,24 +21,65 @@ checklist see [`security.md`](security.md). For backend examples see
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate
 cp .env.example .env
-# Optional: set API_TOKEN, ANTHROPIC_API_KEY, or TARGET_URL
+# Required: set GOOGLE_CLIENT_ID and ALLOWED_EMAILS.
+# Optional: set ANTHROPIC_API_KEY, TARGET_URL.
 docker compose up -d
 ```
 
-VoxGate listens on `http://localhost:8000`. If `API_TOKEN` is left
-empty, the server generates one on startup and logs it — for production
-set a stable value.
+VoxGate listens on `http://localhost:8000`. Login uses Google Sign-In;
+only e-mails listed in `ALLOWED_EMAILS` may sign in. If `SESSION_SECRET`
+is left empty, the server generates one on startup — for production set
+a stable value so sessions survive restarts.
 
 ## Configuration
 
 Everything is configured via environment variables. With Docker, put
 them in `.env` (Compose reads it via `env_file`).
 
-### Required
+### Required (auth)
 
 | Variable | Description |
 |---|---|
-| `API_TOKEN` | Bearer token clients must send. If empty, the server auto-generates one on startup and logs it (per-run). |
+| `GOOGLE_CLIENT_ID` | OAuth 2.0 Client ID from Google Cloud Console. Without it, no one can log in. |
+| `ALLOWED_EMAILS` | Comma-separated list of permitted e-mail addresses. Optional `:provider` suffix per entry, e.g. `alice@example.com:google`. Without a suffix, every configured provider is acceptable. |
+| `SESSION_SECRET` | Server-side key used to sign session cookies. Generate with `openssl rand -hex 32`. If empty, auto-generated per-run (sessions die on restart). |
+| `SESSION_COOKIE_TTL_SECONDS` | Lifetime of a login session. Default `604800` (7 days). |
+| `COOKIE_SECURE` | `1` in production (HTTPS). `0` for local http development. |
+
+#### How requests authenticate (CSRF model)
+
+After `POST /auth/login/{provider}` succeeds, the server sets two
+cookies on the response:
+
+- `vg_session` — HttpOnly, signed (`itsdangerous` + `SESSION_SECRET`),
+  carries `{email, provider, subject, csrf, exp}`. Only the server
+  reads it.
+- `vg_csrf` — readable from JavaScript. The PWA copies its value into
+  an `X-CSRF-Token` header on every state-changing request
+  (`POST /claude`, `POST /prompt`, `POST /auth/logout`).
+
+The server's `verify_session` dependency requires that the
+`X-CSRF-Token` header equals the `vg_csrf` cookie *and* that both
+equal the csrf value bound inside the signed session blob. This is the
+standard double-submit pattern, hardened with a session-internal
+binding so an attacker cannot plant a fresh `vg_csrf` cookie in a
+sibling subdomain attack and still hit a logged-in endpoint. Login and
+logout are additionally Origin-checked when `ALLOWED_ORIGIN` is set.
+
+For programmatic clients, see the curl example in
+[`backends.md`](backends.md) — log in once, persist cookies, copy the
+`vg_csrf` value into a header on subsequent calls.
+
+#### Setting up the Google OAuth Client
+
+1. Open the [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials) page.
+2. Create a new OAuth 2.0 Client ID, type **Web application**.
+3. Under **Authorized JavaScript origins**, add the URL(s) where the PWA is served (e.g. `https://voxgate.example.com`). For local development add `http://localhost:8000`.
+4. **Authorized redirect URIs** are not needed — the PWA uses Google Identity Services (popup/credential flow), not a server-side redirect.
+5. Copy the resulting Client ID into `GOOGLE_CLIENT_ID`.
+
+The same Client ID can serve every VoxGate instance — just add each
+domain to **Authorized JavaScript origins**.
 
 Plus at least one backend:
 
@@ -81,8 +122,9 @@ sessions — flip back to `DEBUG_ENABLED=0` when done.
 | `REQUEST_TIMEOUT` | `120` | Outbound request timeout (seconds). |
 | `ALLOWED_ORIGIN` | *(empty, blocked)* | Allowed CORS origin. |
 | `RATE_LIMIT_PER_MINUTE` | `30` | Requests per IP per minute for `/claude` and `/prompt`. |
-| `SESSION_TTL_SECONDS` | `1800` | Lifetime of an idle session. |
-| `MAX_SESSIONS` | `1000` | Global cap on concurrent sessions. |
+| `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` | `10` | Requests per IP per minute for `/auth/login/*`. |
+| `SESSION_TTL_SECONDS` | `1800` | Lifetime of an idle chat session (in-memory `/claude` history). |
+| `MAX_SESSIONS` | `1000` | Global cap on concurrent chat sessions. |
 | `TRUST_PROXY_HEADERS` | `0` | Set to `1` behind Caddy/Nginx (X-Forwarded-For). See "Reverse proxy". |
 
 ## Reverse proxy
@@ -152,6 +194,8 @@ Cron/timer checks every 12 h.
 - In `.env`: `TRUST_PROXY_HEADERS=1` (so the rate limit applies to the
   real client IP rather than the proxy IP).
 - In `.env`: `ALLOWED_ORIGIN=https://voxgate.example.com`.
+- In `.env`: `COOKIE_SECURE=1` (required for browsers to keep the
+  session cookie over HTTPS).
 - **Do not** add a `Content-Security-Policy` header in the proxy —
   VoxGate sets a strict CSP itself.
 
@@ -222,7 +266,10 @@ services:
       - INSTANCE_NAME=Claude
       - INSTANCE_COLOR=#c8ff00
       - SPEECH_LANG=de-CH
-      - API_TOKEN=${API_TOKEN_CLAUDE}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS_CLAUDE}
+      - SESSION_SECRET=${SESSION_SECRET_CLAUDE}
+      - COOKIE_SECURE=1
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SYSTEM_PROMPT=${SYSTEM_PROMPT_CLAUDE:-}
       - ALLOWED_ORIGIN=${ALLOWED_ORIGIN_CLAUDE:-}
@@ -237,7 +284,10 @@ services:
       - INSTANCE_NAME=Dokbot
       - INSTANCE_COLOR=#00b4d8
       - SPEECH_LANG=de-CH
-      - API_TOKEN=${API_TOKEN_DOKBOT}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS_DOKBOT}
+      - SESSION_SECRET=${SESSION_SECRET_DOKBOT}
+      - COOKIE_SECURE=1
       - TARGET_URL=${TARGET_URL_DOKBOT:-http://host.docker.internal:9001/prompt}
       - TARGET_TOKEN=${TARGET_TOKEN_DOKBOT:-}
       - ALLOWED_ORIGIN=${ALLOWED_ORIGIN_DOKBOT:-}
@@ -256,7 +306,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-export API_TOKEN="your-long-random-token"
+export GOOGLE_CLIENT_ID="123-abc.apps.googleusercontent.com"
+export ALLOWED_EMAILS="you@example.com"
+export SESSION_SECRET="$(openssl rand -hex 32)"
 export ANTHROPIC_API_KEY="sk-ant-..."
 export INSTANCE_NAME="VoxGate"
 export ALLOWED_ORIGIN="https://voxgate.example.com"

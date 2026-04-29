@@ -11,6 +11,7 @@
   <link rel="icon" href="icon.svg">
   <script src="platform.js"></script>
   <script src="debug.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -18,22 +19,22 @@
 <header>
   <select class="header-btn header-select" id="langSelect" data-i18n-aria="headerToggleLang" aria-label="Sprache wählen"></select>
   <div class="header-center">
-    <button class="logo logo-btn" id="logo" data-i18n-aria="headerToggleAuth" aria-label="Zugangsschlüssel ändern">VoxGate</button>
+    <button class="logo logo-btn" id="logo" data-i18n-aria="headerToggleAuth" aria-label="Konto wechseln">VoxGate</button>
   </div>
   <button class="header-btn" id="muteBtn" data-i18n-aria="headerToggleMute" aria-label="Sprachausgabe stummschalten">🔊</button>
   <div class="status-dot" id="statusDot"></div>
 </header>
 
 <div class="auth-overlay" id="authOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="authTitle">
-  <form class="auth-card" id="authForm" autocomplete="off">
-    <h2 id="authTitle" data-i18n="authTitle">Zugang</h2>
-    <p data-i18n="authIntro">Diese Instanz ist privat. Gib den Zugangsschlüssel ein, den du vom Betreiber erhalten hast.</p>
-    <label for="tokenInput" class="auth-label" data-i18n="authLabel">Zugangsschlüssel</label>
-    <input type="password" id="tokenInput" name="token" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" required>
-    <p class="auth-error" id="authError" data-i18n="authError" hidden>Zugang verweigert. Schlüssel prüfen.</p>
-    <button type="submit" class="auth-submit" data-i18n="authSubmit">Speichern</button>
-    <p class="auth-hint" data-i18n="authHint">Wird nur lokal auf diesem Gerät gespeichert.</p>
-  </form>
+  <div class="auth-card">
+    <h2 id="authTitle" data-i18n="authTitle">Anmelden</h2>
+    <p data-i18n="authIntro">Diese Instanz ist privat. Melde dich mit einem Google-Konto an, das vom Betreiber freigeschaltet wurde.</p>
+    <div id="googleSignInButton" class="auth-google-btn"></div>
+    <p class="auth-error" id="authError" hidden></p>
+    <p class="auth-hint" data-i18n="authHint">Anmeldung erfolgt direkt bei Google. VoxGate erhält nur deine E-Mail-Adresse.</p>
+    <p class="auth-user" id="authUser" hidden></p>
+    <button type="button" id="logoutBtn" class="auth-logout" data-i18n="logout" hidden>Abmelden</button>
+  </div>
 </div>
 
 <main id="messages">
@@ -64,6 +65,7 @@
   <button class="new-conv-btn" id="newConvBtn" data-i18n="newConv">Neues Gespräch</button>
 </footer>
 
+<script src="auth.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

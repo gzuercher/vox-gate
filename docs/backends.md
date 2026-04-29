@@ -98,9 +98,21 @@ a voice/TTS wrapper from your own app):
 
 ### curl
 
+VoxGate authenticates with cookies set by `POST /auth/login/google`
+(plus a CSRF header on every POST). For scripted access, persist
+cookies in a jar and forward the `vg_csrf` cookie value in the header:
+
 ```bash
-curl -X POST https://voxgate.example.com/claude \
-  -H "Authorization: Bearer $API_TOKEN" \
+# 1) Log in once and store cookies. ID_TOKEN is a Google ID token your
+#    script obtained out-of-band (e.g. via a service-account flow).
+curl -c cookies.txt -X POST https://voxgate.example.com/auth/login/google \
+  -H "Content-Type: application/json" \
+  -d "{\"id_token\": \"$ID_TOKEN\"}"
+
+# 2) Use the cookies + CSRF header for subsequent calls.
+CSRF=$(awk '$6=="vg_csrf"{print $7}' cookies.txt)
+curl -b cookies.txt -X POST https://voxgate.example.com/claude \
+  -H "X-CSRF-Token: $CSRF" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "What is the capital of Senegal?",
@@ -115,12 +127,18 @@ session.
 ### Browser snippet
 
 ```javascript
+function getCookie(name) {
+  const parts = ('; ' + document.cookie).split('; ' + name + '=');
+  return parts.length < 2 ? '' : parts.pop().split(';').shift();
+}
+
 async function ask(text) {
   const res = await fetch("https://voxgate.example.com/claude", {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${localStorage.apiToken}`,
+      "X-CSRF-Token": getCookie("vg_csrf"),
     },
     body: JSON.stringify({
       text,
@@ -139,8 +157,9 @@ VoxGate manages the history — you only pass `text` and a stable
 
 | Code | Meaning |
 |---|---|
-| 401 | Token missing or wrong |
-| 422 | Validation failed (e.g. `text` too long/empty, `session_id` invalid) |
-| 429 | Rate limit exceeded |
-| 502 | Backend (Anthropic or your `TARGET_URL`) returned an error |
-| 503 | Backend not configured (`ANTHROPIC_API_KEY` or `TARGET_URL` empty) |
+| 401 | Not signed in (cookie missing or expired). |
+| 403 | Either the user is not in `ALLOWED_EMAILS`, or the `X-CSRF-Token` header is missing/wrong. |
+| 422 | Validation failed (e.g. `text` too long/empty, `session_id` invalid). |
+| 429 | Rate limit exceeded. |
+| 502 | Backend (Anthropic or your `TARGET_URL`) returned an error. |
+| 503 | Backend not configured (`ANTHROPIC_API_KEY` or `TARGET_URL` empty). |

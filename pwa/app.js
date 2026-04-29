@@ -1,4 +1,4 @@
-  let instanceConfig = { name: 'VoxGate', color: '#c8ff00', lang: 'de-CH', langs: ['de-CH', 'fr-CH'], maxLength: 4000 };
+  let instanceConfig = { name: 'VoxGate', color: '#c8ff00', lang: 'de-CH', langs: ['de-CH', 'fr-CH'], maxLength: 4000, googleClientId: '', providers: [] };
 
   // Autonyms — each language labelled in its own form. The picker shows
   // these regardless of current UI language so a French speaker can find
@@ -18,14 +18,17 @@
   const I18N = {
     'de-CH': {
       headerToggleLang: 'Sprache wählen',
-      headerToggleAuth: 'Zugangsschlüssel ändern',
+      headerToggleAuth: 'Konto wechseln',
       headerToggleMute: 'Sprachausgabe stummschalten',
-      authTitle: 'Zugang',
-      authIntro: 'Diese Instanz ist privat. Gib den Zugangsschlüssel ein, den du vom Betreiber erhalten hast.',
-      authLabel: 'Zugangsschlüssel',
-      authError: 'Zugang verweigert. Schlüssel prüfen.',
-      authSubmit: 'Speichern',
-      authHint: 'Wird nur lokal auf diesem Gerät gespeichert.',
+      authTitle: 'Anmelden',
+      authIntro: 'Diese Instanz ist privat. Melde dich mit einem Google-Konto an, das vom Betreiber freigeschaltet wurde.',
+      authHint: 'Anmeldung erfolgt direkt bei Google. VoxGate erhält nur deine E-Mail-Adresse.',
+      notAllowedError: 'Diese Google-Adresse ist auf dieser Instanz nicht freigeschaltet.',
+      rateLimitedError: 'Zu viele Anmeldeversuche. Bitte später erneut versuchen.',
+      signInFailedError: 'Anmeldung fehlgeschlagen. Bitte erneut versuchen.',
+      signInUnavailable: 'Anmeldung nicht verfügbar — Betreiber muss GOOGLE_CLIENT_ID setzen.',
+      loggedInAs: 'Angemeldet als',
+      logout: 'Abmelden',
       emptyTitle: 'Tippen und sprechen',
       emptyHint: 'Nochmal tippen = senden',
       transcriptReady: 'Bereit...',
@@ -41,14 +44,17 @@
     },
     'fr-CH': {
       headerToggleLang: 'Choisir la langue',
-      headerToggleAuth: "Modifier la clé d'accès",
+      headerToggleAuth: 'Changer de compte',
       headerToggleMute: 'Couper la synthèse vocale',
-      authTitle: 'Accès',
-      authIntro: "Cette instance est privée. Saisissez la clé d'accès reçue de l'exploitant.",
-      authLabel: "Clé d'accès",
-      authError: 'Accès refusé. Vérifiez la clé.',
-      authSubmit: 'Enregistrer',
-      authHint: 'Stocké uniquement sur cet appareil.',
+      authTitle: 'Connexion',
+      authIntro: "Cette instance est privée. Connectez-vous avec un compte Google autorisé par l'exploitant.",
+      authHint: 'La connexion se fait directement chez Google. VoxGate reçoit uniquement votre adresse e-mail.',
+      notAllowedError: "Cette adresse Google n'est pas autorisée sur cette instance.",
+      rateLimitedError: 'Trop de tentatives. Veuillez réessayer plus tard.',
+      signInFailedError: 'Échec de la connexion. Veuillez réessayer.',
+      signInUnavailable: "Connexion indisponible — l'exploitant doit définir GOOGLE_CLIENT_ID.",
+      loggedInAs: 'Connecté en tant que',
+      logout: 'Se déconnecter',
       emptyTitle: 'Touchez et parlez',
       emptyHint: 'Touchez à nouveau pour envoyer',
       transcriptReady: 'Prêt...',
@@ -64,14 +70,17 @@
     },
     'it-CH': {
       headerToggleLang: 'Scegli la lingua',
-      headerToggleAuth: "Cambia chiave d'accesso",
+      headerToggleAuth: 'Cambia account',
       headerToggleMute: 'Disattiva sintesi vocale',
       authTitle: 'Accesso',
-      authIntro: "Questa istanza è privata. Inserisci la chiave d'accesso ricevuta dal gestore.",
-      authLabel: "Chiave d'accesso",
-      authError: 'Accesso negato. Verifica la chiave.',
-      authSubmit: 'Salva',
-      authHint: 'Salvato solo su questo dispositivo.',
+      authIntro: 'Questa istanza è privata. Accedi con un account Google autorizzato dal gestore.',
+      authHint: "L'accesso avviene direttamente presso Google. VoxGate riceve solo il tuo indirizzo e-mail.",
+      notAllowedError: 'Questo indirizzo Google non è autorizzato su questa istanza.',
+      rateLimitedError: 'Troppi tentativi di accesso. Riprova più tardi.',
+      signInFailedError: 'Accesso fallito. Riprova.',
+      signInUnavailable: 'Accesso non disponibile — il gestore deve impostare GOOGLE_CLIENT_ID.',
+      loggedInAs: 'Connesso come',
+      logout: 'Disconnetti',
       emptyTitle: 'Tocca e parla',
       emptyHint: 'Tocca di nuovo per inviare',
       transcriptReady: 'Pronto...',
@@ -87,14 +96,17 @@
     },
     'en-US': {
       headerToggleLang: 'Choose language',
-      headerToggleAuth: 'Change access key',
+      headerToggleAuth: 'Switch account',
       headerToggleMute: 'Mute voice output',
-      authTitle: 'Access',
-      authIntro: 'This instance is private. Enter the access key you received from the operator.',
-      authLabel: 'Access key',
-      authError: 'Access denied. Check the key.',
-      authSubmit: 'Save',
-      authHint: 'Stored only on this device.',
+      authTitle: 'Sign in',
+      authIntro: 'This instance is private. Sign in with a Google account that the operator has authorized.',
+      authHint: 'Sign-in happens directly with Google. VoxGate only receives your e-mail address.',
+      notAllowedError: 'This Google address is not authorized on this instance.',
+      rateLimitedError: 'Too many sign-in attempts. Please try again later.',
+      signInFailedError: 'Sign-in failed. Please try again.',
+      signInUnavailable: 'Sign-in unavailable — operator must set GOOGLE_CLIENT_ID.',
+      loggedInAs: 'Signed in as',
+      logout: 'Sign out',
       emptyTitle: 'Tap and speak',
       emptyHint: 'Tap again to send',
       transcriptReady: 'Ready...',
@@ -110,14 +122,17 @@
     },
     'es-ES': {
       headerToggleLang: 'Elegir idioma',
-      headerToggleAuth: 'Cambiar clave de acceso',
+      headerToggleAuth: 'Cambiar cuenta',
       headerToggleMute: 'Silenciar voz',
-      authTitle: 'Acceso',
-      authIntro: 'Esta instancia es privada. Introduce la clave de acceso recibida del operador.',
-      authLabel: 'Clave de acceso',
-      authError: 'Acceso denegado. Verifica la clave.',
-      authSubmit: 'Guardar',
-      authHint: 'Almacenado solo en este dispositivo.',
+      authTitle: 'Iniciar sesión',
+      authIntro: 'Esta instancia es privada. Inicia sesión con una cuenta de Google autorizada por el operador.',
+      authHint: 'El inicio de sesión se realiza directamente con Google. VoxGate solo recibe tu dirección de correo.',
+      notAllowedError: 'Esta dirección de Google no está autorizada en esta instancia.',
+      rateLimitedError: 'Demasiados intentos. Vuelve a intentarlo más tarde.',
+      signInFailedError: 'Error al iniciar sesión. Inténtalo de nuevo.',
+      signInUnavailable: 'Inicio de sesión no disponible — el operador debe configurar GOOGLE_CLIENT_ID.',
+      loggedInAs: 'Sesión iniciada como',
+      logout: 'Cerrar sesión',
       emptyTitle: 'Toca y habla',
       emptyHint: 'Toca de nuevo para enviar',
       transcriptReady: 'Listo...',
@@ -189,36 +204,10 @@
   const muteBtn = document.getElementById('muteBtn');
   const newConvBtn = document.getElementById('newConvBtn');
   const discardBtn = document.getElementById('discardBtn');
-  const authOverlay = document.getElementById('authOverlay');
-  const authForm = document.getElementById('authForm');
-  const tokenInput = document.getElementById('tokenInput');
-  const authError = document.getElementById('authError');
-
-  function showAuthOverlay(withError) {
-    authError.hidden = !withError;
-    tokenInput.value = '';
-    authOverlay.hidden = false;
-    setTimeout(() => tokenInput.focus(), 50);
-  }
-
-  function hideAuthOverlay() {
-    authOverlay.hidden = true;
-    authError.hidden = true;
-  }
-
-  authForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const value = tokenInput.value.trim();
-    if (!value) return;
-    localStorage.setItem('apiToken', value);
-    hideAuthOverlay();
-  });
-
-  logo.addEventListener('click', () => showAuthOverlay(false));
-
-  if (!localStorage.getItem('apiToken')) {
-    showAuthOverlay(false);
-  }
+  // Auth overlay is owned by VoxGateAuth (auth.js). The logo button opens the
+  // overlay so the user can switch accounts or sign out without waiting for a
+  // 401 from the API.
+  logo.addEventListener('click', () => VoxGateAuth.showLogin());
 
   function populateLangSelect() {
     const langs = supportedLangs();
@@ -577,21 +566,22 @@
     setStatus('sending');
 
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      const token = localStorage.getItem('apiToken');
-      if (token) headers['Authorization'] = 'Bearer ' + token;
-
-      const res = await fetch('/claude', {
+      const res = await fetch('/claude', VoxGateAuth.withAuthHeaders({
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, session_id: sessionId })
-      });
+      }));
 
       if (res.status === 401) {
-        localStorage.removeItem('apiToken');
         typingDiv.remove();
         setStatus('error');
-        showAuthOverlay(true);
+        VoxGateAuth.showLogin();
+        return;
+      }
+      if (res.status === 403) {
+        typingDiv.remove();
+        setStatus('error');
+        VoxGateAuth.showLogin(t('notAllowedError'));
         return;
       }
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -621,5 +611,11 @@
       currentLang = detectInitialLang();
     }
     applyLang();
+    VoxGateAuth.init({
+      googleClientId: instanceConfig.googleClientId || '',
+      providers: instanceConfig.providers || [],
+      translate: t,
+      onChange: () => { /* user state changed; nothing to do here yet */ },
+    });
   });
   setStatus('');

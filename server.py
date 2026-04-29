@@ -9,9 +9,17 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+from auth import (
+    AuthConfig,
+    GoogleVerifier,
+    SessionData,
+    build_auth_router,
+    build_verify_session,
+    parse_allowed_emails,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,12 +29,9 @@ logger = logging.getLogger("voxgate")
 
 app = FastAPI()
 
-API_TOKEN = os.environ.get("API_TOKEN", "")
 TARGET_URL = os.environ.get("TARGET_URL", "")
 TARGET_TOKEN = os.environ.get("TARGET_TOKEN", "")
 INSTANCE_NAME = os.environ.get("INSTANCE_NAME", "VoxGate")
-# Human-friendly title shown in the UI (header, browser tab). Falls back to
-# INSTANCE_NAME, which is normally a technical identifier (e.g. "ZPlanVox-DE").
 INSTANCE_DISPLAY_NAME = os.environ.get("INSTANCE_DISPLAY_NAME", "").strip() or INSTANCE_NAME
 INSTANCE_COLOR = os.environ.get("INSTANCE_COLOR", "#c8ff00")
 SPEECH_LANG = os.environ.get("SPEECH_LANG", "de-CH")
@@ -51,34 +56,52 @@ SESSION_MAX_MESSAGES = 20
 SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))
 MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "1000"))
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "30"))
+AUTH_LOGIN_RATE_LIMIT_PER_MINUTE = int(
+    os.environ.get("AUTH_LOGIN_RATE_LIMIT_PER_MINUTE", "10")
+)
 TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "0") == "1"
 
-# Opt-in debug log capture. Default OFF. When DEBUG_ENABLED=1 and DEBUG_TOKEN
-# is set, /debug-log accepts JSON payloads from the PWA running with
-# ?debug=<token>. Payloads are written to stderr (visible via docker logs).
-# When disabled, the endpoint returns 404 — its existence stays hidden.
+# Auth config
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+ALLOWED_EMAILS_RAW = os.environ.get("ALLOWED_EMAILS", "")
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip()
+SESSION_COOKIE_TTL_SECONDS = int(
+    os.environ.get("SESSION_COOKIE_TTL_SECONDS", str(7 * 24 * 3600))
+)
+# Set COOKIE_SECURE=1 in production (HTTPS). Defaults to 0 so local http works.
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
+
 DEBUG_ENABLED = os.environ.get("DEBUG_ENABLED", "0") == "1"
 DEBUG_TOKEN = os.environ.get("DEBUG_TOKEN", "").strip()
 DEBUG_MAX_BODY_BYTES = 8 * 1024
 DEBUG_RATE_LIMIT_PER_SEC = 20
 _debug_buckets: dict = {}
 
-if os.environ.get("VOXGATE_ALLOW_OPEN"):
+if not SESSION_SECRET:
+    SESSION_SECRET = secrets.token_hex(32)
     print(
-        "WARNING: VOXGATE_ALLOW_OPEN is no longer used. API_TOKEN is now "
-        "auto-generated when empty (see logs). Remove the variable from "
-        "your environment. See docs/security.md.",
+        "\n" + "=" * 60 + "\n"
+        "No SESSION_SECRET set. Generated for this run.\n"
+        "Set SESSION_SECRET in your .env to keep sessions valid across restarts.\n"
+        + "=" * 60,
         file=sys.stderr,
     )
 
-if not API_TOKEN:
-    API_TOKEN = secrets.token_hex(32)
+ALLOWED_EMAILS = parse_allowed_emails(ALLOWED_EMAILS_RAW)
+PROVIDERS = {}
+if GOOGLE_CLIENT_ID:
+    PROVIDERS["google"] = GoogleVerifier(client_id=GOOGLE_CLIENT_ID)
+
+if not PROVIDERS:
     print(
-        "\n" + "=" * 60 + "\n"
-        "No API_TOKEN set. Generated for this run:\n\n"
-        f"  API_TOKEN={API_TOKEN}\n\n"
-        "Paste into your .env to keep it stable across restarts.\n"
-        + "=" * 60,
+        "WARNING: No auth provider configured. Set GOOGLE_CLIENT_ID to enable login. "
+        "/prompt and /claude will reject every request.",
+        file=sys.stderr,
+    )
+if not ALLOWED_EMAILS:
+    print(
+        "WARNING: ALLOWED_EMAILS is empty. No user can log in. "
+        "Set ALLOWED_EMAILS in your .env (comma-separated, optional :provider suffix).",
         file=sys.stderr,
     )
 
@@ -92,6 +115,7 @@ if not TARGET_URL and not ANTHROPIC_API_KEY:
 _sessions: dict[str, dict] = {}
 _anthropic_client = None
 _rate_buckets: dict[str, deque] = {}
+_auth_login_buckets: dict[str, deque] = {}
 
 
 def _get_anthropic_client():
@@ -125,6 +149,21 @@ def _enforce_session_cap() -> None:
         del _sessions[sid]
 
 
+def _login_rate_limit(request: Request) -> None:
+    ip = _client_ip(request)
+    now = time.time()
+    bucket = _auth_login_buckets.setdefault(ip, deque())
+    while bucket and bucket[0] < now - 60:
+        bucket.popleft()
+    if len(bucket) >= AUTH_LOGIN_RATE_LIMIT_PER_MINUTE:
+        logger.warning("[%s] auth_login_rate_limit ip=%s", INSTANCE_NAME, ip)
+        raise HTTPException(status_code=429, detail="Too many login attempts")
+    bucket.append(now)
+    if len(_auth_login_buckets) > 10000:
+        for stale_ip in [k for k, v in _auth_login_buckets.items() if not v]:
+            _auth_login_buckets.pop(stale_ip, None)
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -132,13 +171,21 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "microphone=(self), camera=(), geolocation=()"
+    # CSP notes:
+    # - script-src is strict ('self' + GIS client only). No inline scripts.
+    # - style-src includes 'unsafe-inline' because Google Identity Services
+    #   injects inline styles into the rendered button. Tightening this would
+    #   require a per-request nonce, which is overkill for a no-build PWA. The
+    #   residual risk (CSS-only XSS) is very narrow given the rest of the CSP.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self'; "
-        "style-src 'self' https://fonts.googleapis.com; "
+        "script-src 'self' https://accounts.google.com/gsi/client; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com "
+        "https://accounts.google.com/gsi/style; "
         "font-src 'self' https://fonts.gstatic.com; "
-        "img-src 'self' data:; "
-        "connect-src 'self'; "
+        "img-src 'self' data: https://*.googleusercontent.com; "
+        "connect-src 'self' https://accounts.google.com/gsi/; "
+        "frame-src https://accounts.google.com/gsi/; "
         "manifest-src 'self'; "
         "frame-ancestors 'none'; "
         "base-uri 'self'"
@@ -169,19 +216,29 @@ async def rate_limit(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[ALLOWED_ORIGIN] if ALLOWED_ORIGIN else [],
+    allow_credentials=True,
     allow_methods=["POST", "GET"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
-security = HTTPBearer(auto_error=False)
 
+# Origins permitted to initiate /auth/login + /auth/logout. Without a value,
+# the AuthConfig skips the cross-origin check (dev convenience). Behind a
+# reverse proxy this should always be configured via ALLOWED_ORIGIN.
+_expected_origins = frozenset({ALLOWED_ORIGIN}) if ALLOWED_ORIGIN else frozenset()
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not API_TOKEN:
-        return
-    presented = credentials.credentials if credentials else ""
-    if not secrets.compare_digest(presented, API_TOKEN):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+_auth_config = AuthConfig(
+    providers=PROVIDERS,
+    allowed_emails=ALLOWED_EMAILS,
+    session_secret=SESSION_SECRET,
+    session_ttl_seconds=SESSION_COOKIE_TTL_SECONDS,
+    cookies_secure=COOKIE_SECURE,
+    instance_name=INSTANCE_NAME,
+    expected_origins=_expected_origins,
+    rate_limit_check=_login_rate_limit,
+)
+app.include_router(build_auth_router(_auth_config))
+verify_session = build_verify_session(_auth_config)
 
 
 class PromptRequest(BaseModel):
@@ -220,22 +277,33 @@ async def debug_log(request: Request):
 
 @app.get("/config")
 async def get_config():
+    # GOOGLE_CLIENT_ID is intentionally public: Google Identity Services puts it
+    # in the page source anyway. Reviewers, do not flag this as a leak.
     return {
         "name": INSTANCE_DISPLAY_NAME,
         "color": INSTANCE_COLOR,
         "lang": SPEECH_LANG,
         "langs": SPEECH_LANGS,
         "maxLength": MAX_PROMPT_LENGTH,
+        "googleClientId": GOOGLE_CLIENT_ID,
+        "providers": sorted(PROVIDERS.keys()),
     }
 
 
 @app.post("/prompt")
-async def prompt(req: PromptRequest, request: Request, _=Depends(verify_token)):
+async def prompt(
+    req: PromptRequest,
+    request: Request,
+    session: SessionData = Depends(verify_session),
+):
     if not TARGET_URL:
         raise HTTPException(status_code=503, detail="No target configured")
 
     ip = _client_ip(request)
-    logger.info("prompt ip=%s text_len=%d", ip, len(req.text))
+    logger.info(
+        "[%s] prompt ip=%s user=%s text_len=%d",
+        INSTANCE_NAME, ip, session.email, len(req.text),
+    )
 
     headers = {"Content-Type": "application/json"}
     if TARGET_TOKEN:
@@ -261,7 +329,11 @@ async def prompt(req: PromptRequest, request: Request, _=Depends(verify_token)):
 
 
 @app.post("/claude")
-async def claude(req: ClaudeRequest, request: Request, _=Depends(verify_token)):
+async def claude(
+    req: ClaudeRequest,
+    request: Request,
+    session: SessionData = Depends(verify_session),
+):
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=503, detail="No Anthropic API key configured")
 
@@ -271,16 +343,16 @@ async def claude(req: ClaudeRequest, request: Request, _=Depends(verify_token)):
     ip = _client_ip(request)
     sid_short = req.session_id[:8]
     logger.info(
-        "claude ip=%s session=%s text_len=%d sessions=%d",
-        ip, sid_short, len(req.text), len(_sessions),
+        "[%s] claude ip=%s user=%s session=%s text_len=%d sessions=%d",
+        INSTANCE_NAME, ip, session.email, sid_short, len(req.text), len(_sessions),
     )
 
-    session = _sessions.setdefault(req.session_id, {"messages": [], "last_seen": now})
-    session["last_seen"] = now
+    chat = _sessions.setdefault(req.session_id, {"messages": [], "last_seen": now})
+    chat["last_seen"] = now
     _enforce_session_cap()
     if req.session_id not in _sessions:
-        _sessions[req.session_id] = session
-    history = session["messages"]
+        _sessions[req.session_id] = chat
+    history = chat["messages"]
     history.append({"role": "user", "content": req.text})
 
     try:

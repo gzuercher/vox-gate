@@ -37,14 +37,16 @@ estimated time:
   text accumulation. Modest. The tricky part is making
   `speechSynthesis` speak partial sentences without sounding chopped.
 
-### Multi-token support (named keys)
-- **Value:** today there is one shared `API_TOKEN`. Adding named keys
-  (`API_TOKENS=alice:xxx,bob:yyy`) enables per-user revocation and
-  per-user audit-log entries — directly relevant for productive use
-  in a small group.
-- **Cost:** small server change, but breaking for the `/config` and
-  setup story. Keep single-token mode as default to not disrupt
-  existing users.
+### Additional identity providers (Microsoft, Apple, generic OIDC)
+- **Value:** users without a Google account get a familiar option, and
+  organisations on Microsoft 365 / Entra ID can plug their tenant in
+  directly. The backend already routes through a `/auth/login/{provider}`
+  endpoint with a generic verifier protocol, so additional providers
+  slot in without a data-model change.
+- **Cost:** per provider — register a generic OIDC verifier (issuer URL,
+  audience, JWKS auto-fetch), wire a frontend button, extend the CSP for
+  the new identity domain. ~1 working day per provider once the first
+  non-Google one has been done.
 
 ### iOS Safari minimum support
 - **Value:** unblock iPhone users who currently get a half-broken UX
@@ -129,12 +131,13 @@ estimated time:
   cannot really do reliably. Native app dependency. Privacy theatre
   unless local — and local wake-word adds yet another dependency.
 
-### Multi-user / family profiles with proper login
-- **Value:** different histories, settings, voices per user; per-user
-  Anthropic budget tracking.
-- **Cost:** introduces a real auth system, sessions, password reset,
-  account UI. VoxGate stops being a single-tenant tool. Big philosophy
-  break — only do this if it's clearly the new product.
+### Multi-user / family profiles with per-user data
+- **Value:** different chat histories, settings, voices per user;
+  per-user Anthropic budget tracking. Login already identifies users by
+  Google e-mail, so the foundation is in place.
+- **Cost:** persist `_sessions` keyed by `(user_email, session_id)`,
+  add per-user budget tracking, build a minimal settings UI. Account UI
+  / password reset are *not* needed — Google handles them.
 
 ---
 
@@ -143,11 +146,10 @@ estimated time:
 To keep the roadmap honest, here's what we are *not* going to do, and
 why:
 
-- **Built-in user accounts with passwords.** Out of scope. The bearer
-  token + edge-pre-auth pattern is enough for VoxGate's target
-  audience. Bringing in account systems means owning password reset,
-  email verification, etc. — none of which is core to "voice in,
-  voice out".
+- **Built-in user accounts with passwords.** Out of scope. Login goes
+  through external identity providers (Google today; OIDC for others
+  later). Bringing in our own password reset, email verification, etc.
+  is not core to "voice in, voice out".
 - **Token in URL (`?key=…`) for easy sharing.** Security antipattern.
   Tokens leak via referer headers, browser history, and access logs.
 - **Multi-worker uvicorn with sticky sessions.** The single-worker

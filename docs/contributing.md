@@ -24,7 +24,7 @@ make check        # lint + tests
 
 The binding rules live in `.claude/rules/` and apply to both human contributors and Claude Code:
 
-- [`../.claude/rules/security.md`](../.claude/rules/security.md) — no secrets in code, bearer token via env var, validate inputs.
+- [`../.claude/rules/security.md`](../.claude/rules/security.md) — no secrets in code, Google Sign-In with allowlist, validate inputs.
 - [`../.claude/rules/code-quality.md`](../.claude/rules/code-quality.md) — strict typing, no empty `catch` blocks, components under 200 lines.
 - [`../.claude/rules/accessibility.md`](../.claude/rules/accessibility.md) — semantic HTML, ARIA, keyboard navigation, color contrast (WCAG AA).
 - [`../.claude/rules/dev-stack.md`](../.claude/rules/dev-stack.md) — tech stack and verification rules.
@@ -46,11 +46,11 @@ In addition:
 ## Adding a new endpoint
 
 1. Define the Pydantic request model in `server.py` (`Field(..., min_length=1, max_length=…)`).
-2. Protect the endpoint with `_=Depends(verify_token)` if auth is required.
+2. Protect the endpoint with `session: SessionData = Depends(verify_session)` if auth is required. The dependency validates the signed `vg_session` cookie *and* the `X-CSRF-Token` header against the `vg_csrf` cookie. The PWA helper `VoxGateAuth.withAuthHeaders(...)` wires the header automatically.
 3. Wrap external calls in a function so tests can mock them (see `_get_anthropic_client`).
-4. Add tests in `tests/test_server.py` — at minimum: happy path, validation errors, auth errors, backend errors.
+4. Add tests in `tests/test_server.py` — at minimum: happy path, validation errors, auth errors (no session, missing CSRF), backend errors.
 5. Document the endpoint in `README.md` under "API reference".
-6. If a new env variable is introduced: extend `.env.example` and the configuration table in `README.md`.
+6. If a new env variable is introduced: extend `.env.example`, `deploy/caddy/.env.example`, and the configuration table in `docs/setup.md`.
 
 ## Working with Claude Code
 

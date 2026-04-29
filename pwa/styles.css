@@ -212,6 +212,32 @@
       color: var(--muted);
       text-align: center;
     }
+    .auth-google-btn {
+      display: flex;
+      justify-content: center;
+      min-height: 44px;
+    }
+    .auth-user {
+      font-size: 13px;
+      color: var(--text);
+      text-align: center;
+      word-break: break-all;
+    }
+    .auth-logout {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .auth-logout:active {
+      transform: translateY(1px);
+    }
 
     .status-dot {
       width: 8px;

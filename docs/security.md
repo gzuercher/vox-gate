@@ -5,9 +5,19 @@ item should be answerable with yes/no without reading source code.
 
 ## Before the first public deploy
 
-- [ ] **`API_TOKEN` is set explicitly in `.env`.** Otherwise VoxGate
-      generates a fresh token on every container start (fine for dev,
-      bad for production — PWA clients lose access on each restart).
+- [ ] **`GOOGLE_CLIENT_ID` is set** to the OAuth Client ID issued by the
+      Google Cloud Console. Without it, login is disabled and every
+      request to `/claude` and `/prompt` is rejected.
+- [ ] **`ALLOWED_EMAILS` lists every permitted user explicitly.**
+      Adding/removing an entry takes effect on the next request — no
+      restart needed.
+- [ ] **`SESSION_SECRET` is set explicitly in `.env`.** Otherwise
+      VoxGate generates a fresh secret on every container start
+      (fine for dev, bad for production — every restart logs all users
+      out and may invalidate active PWA installs).
+- [ ] **`COOKIE_SECURE=1` in production.** With `0`, browsers refuse to
+      keep the session cookie over HTTPS in some configurations. Only
+      use `0` for local `http://localhost` development.
 - [ ] **`ANTHROPIC_API_KEY` has a spending limit.** Set it in the
       Anthropic console dashboard so token leaks are bounded by cost.
 - [ ] **`ALLOWED_ORIGIN` points at the real domain.** Empty = no
@@ -17,9 +27,9 @@ item should be answerable with yes/no without reading source code.
       exclusively through the reverse proxy.** Otherwise clients can
       spoof `X-Forwarded-For` and bypass rate limiting. Inside the
       `deploy/caddy/` bundle this is automatically the case.
-- [ ] **`RATE_LIMIT_PER_MINUTE` chosen deliberately.** Default 30 is
-      fine for one person; raise it for a family. Too high = no
-      protection against bot abuse.
+- [ ] **`RATE_LIMIT_PER_MINUTE` and `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE`
+      chosen deliberately.** Defaults 30 / 10 are fine for a small
+      group.
 
 ## Backend-specific
 
@@ -42,8 +52,9 @@ item should be answerable with yes/no without reading source code.
 ## During operation
 
 - [ ] **Logs are reviewed.** `docker compose logs -f voxgate` shows
-      audit entries with IP, session prefix and text length (no
-      payload). 429s and backend errors too.
+      audit entries with the user's e-mail, IP, session prefix and
+      text length (no payload), plus `auth_login_ok` /
+      `auth_not_allowed` lines.
 - [ ] **No additional `Content-Security-Policy` in the reverse
       proxy.** VoxGate sets a strict CSP itself. A second directive
       in Caddy/nginx collides.
@@ -55,42 +66,62 @@ item should be answerable with yes/no without reading source code.
 
 Active without any operator action:
 
-- Token requirement on `/prompt` and `/claude`. Auto-generation when
-  empty (no "open mode").
-- Timing-safe token comparison (`secrets.compare_digest`).
-- Per-IP rate limit on both endpoints.
+- Google Sign-In with strict ID-token verification (issuer, audience,
+  signature against Google JWKS, `email_verified=true`, `exp`).
+- Allowlist match on every login *and* every authenticated request —
+  removing a user from `ALLOWED_EMAILS` revokes access on the next
+  request without a restart.
+- Optional `email:provider` binding in `ALLOWED_EMAILS` — defends
+  against an attacker registering the same e-mail at a different
+  identity provider once a second provider is added.
+- Session cookies are `HttpOnly`, `Secure` (when `COOKIE_SECURE=1`) and
+  `SameSite=Strict`, signed with `itsdangerous` using `SESSION_SECRET`.
+  XSS cannot read them.
+- CSRF protection: every state-changing endpoint requires the
+  `X-CSRF-Token` header to match the `vg_csrf` cookie (double-submit).
+- Per-IP rate limit on `/claude`, `/prompt` *and* `/auth/login/*`.
 - Session TTL and a global session cap (memory DoS protection).
 - Strict `session_id` validation (`^[A-Za-z0-9_-]{8,128}$`).
-- Strict CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options:
-  nosniff`, `Referrer-Policy`, `Permissions-Policy` (microphone only).
-- Audit log without payload.
-- CORS blocked by default.
+- Strict CSP (Google Identity Services script and frame allowed only at
+  `/gsi/*`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy`, `Permissions-Policy` (microphone only).
+- Audit log lines include the authenticated user's e-mail.
+- CORS blocked by default; `allow_credentials=True` only with an
+  explicit `ALLOWED_ORIGIN`.
 
 ## Optional: edge-level pre-auth for closed groups
 
-VoxGate's bearer-token check is cryptographically sufficient — without
-the token nobody can run prompts or hit your `/prompt` backend. For a
-closed group of users (family, small team) you may still want to hide
-the instance from random visitors of the URL. That is independent of
-VoxGate and lives one layer up:
+For paranoid setups you can layer additional auth in front of VoxGate.
+That is independent of VoxGate's own login and lives one layer up:
 
-- **HTTP Basic Auth in Caddy/nginx.** Add a `basicauth` block in front
-  of VoxGate. Users see the browser's auth dialog before the PWA
-  loads. Credentials persist across PWA installs.
 - **Cloudflare Access** in front of a Cloudflare Tunnel. Magic-link
   email login at the edge; no code changes inside VoxGate. Free tier
   covers small groups.
 - **Tailnet-only**: run VoxGate behind Tailscale and skip Funnel.
   Only members of your tailnet can reach the URL at all.
 
-In all three cases, VoxGate's `API_TOKEN` still applies inside —
-defence in depth, not a replacement.
+VoxGate's Google login still applies inside — defence in depth, not a
+replacement.
 
 ## Residual risks
 
-- **localStorage XSS:** the bearer token lives in browser
-  `localStorage`. CSP blocks inline scripts; any future use of
-  `innerHTML` with server data must be very careful.
-- **In-memory sessions:** histories live in the process. Restarts
-  drop them. Intentional.
+- **In-memory chat sessions:** `/claude` history lives in the process.
+  Restarts drop it. Intentional.
 - **Per-IP rate limit only:** behind NAT/CGNAT users share the quota.
+- **Dependency on Google availability:** during a Google Identity
+  Services outage, no one can log in. The session cookie remains valid
+  for `SESSION_COOKIE_TTL_SECONDS` regardless, so already-logged-in
+  users are unaffected.
+- **Token replay until expiry:** revoking a Google account does *not*
+  immediately invalidate an issued VoxGate session cookie. Remove the
+  e-mail from `ALLOWED_EMAILS` to revoke instantly (the live allowlist
+  check rejects every subsequent request).
+- **Stateless logout:** `POST /auth/logout` clears the cookies on the
+  client but the signed session blob remains cryptographically valid
+  until `SESSION_COOKIE_TTL_SECONDS` elapses. If a cookie was captured
+  before logout (e.g. on a stolen laptop) and the e-mail stays in
+  `ALLOWED_EMAILS`, the cookie still authenticates. Mitigations:
+  remove the e-mail from `ALLOWED_EMAILS`, or rotate `SESSION_SECRET`
+  to invalidate every session at once. A per-session deny-list would
+  add server-side state and is intentionally not implemented at this
+  scale — the allowlist provides the practical revoke path.
