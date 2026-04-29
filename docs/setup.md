@@ -204,6 +204,11 @@ Several VoxGate instances on the same host — for example a green PWA
 custom backend). Each instance is its own container with its own port,
 env vars, and PWA icon.
 
+**This is for distinct backends or distinct user groups, not for
+multiple human languages.** Speech recognition language, TTS voice and
+UI text all switch through the in-app language picker — running one
+instance per language is unnecessary duplication.
+
 Replace the single-service `docker-compose.yml` with one block per
 instance, e.g.:
 
