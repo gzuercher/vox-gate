@@ -29,7 +29,11 @@ logger = logging.getLogger("voxgate")
 
 app = FastAPI()
 
-TARGET_URL = os.environ.get("TARGET_URL", "")
+# VoxGate is a pure forwarding proxy: every authenticated /chat request is
+# enriched with the verified user e-mail and POSTed to TARGET_URL. The backend
+# at TARGET_URL owns all LLM logic, system prompts, history and routing. See
+# docs/backend-contract.md for the request/response schema.
+TARGET_URL = os.environ.get("TARGET_URL", "").strip()
 TARGET_TOKEN = os.environ.get("TARGET_TOKEN", "")
 INSTANCE_NAME = os.environ.get("INSTANCE_NAME", "VoxGate")
 INSTANCE_DISPLAY_NAME = os.environ.get("INSTANCE_DISPLAY_NAME", "").strip() or INSTANCE_NAME
@@ -47,14 +51,6 @@ if SPEECH_LANG not in SPEECH_LANGS:
 MAX_PROMPT_LENGTH = int(os.environ.get("MAX_PROMPT_LENGTH", "4000"))
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "")
 REQUEST_TIMEOUT = int(os.environ.get("REQUEST_TIMEOUT", "120"))
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-SYSTEM_PROMPT = os.environ.get(
-    "SYSTEM_PROMPT", "You are a helpful assistant. Answer concisely."
-)
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5")
-SESSION_MAX_MESSAGES = 20
-SESSION_TTL_SECONDS = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))
-MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "1000"))
 RATE_LIMIT_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_MINUTE", "30"))
 AUTH_LOGIN_RATE_LIMIT_PER_MINUTE = int(
     os.environ.get("AUTH_LOGIN_RATE_LIMIT_PER_MINUTE", "10")
@@ -95,7 +91,7 @@ if GOOGLE_CLIENT_ID:
 if not PROVIDERS:
     print(
         "WARNING: No auth provider configured. Set GOOGLE_CLIENT_ID to enable login. "
-        "/prompt and /claude will reject every request.",
+        "/chat will reject every request.",
         file=sys.stderr,
     )
 if not ALLOWED_EMAILS:
@@ -105,26 +101,15 @@ if not ALLOWED_EMAILS:
         file=sys.stderr,
     )
 
-if not TARGET_URL and not ANTHROPIC_API_KEY:
+if not TARGET_URL:
     print(
-        "WARNING: Neither TARGET_URL nor ANTHROPIC_API_KEY is set. "
-        "/prompt and /claude will return 503.",
+        "WARNING: TARGET_URL is not set. /chat will return 503 for every request. "
+        "Set TARGET_URL in your .env to point at the backend that handles chat.",
         file=sys.stderr,
     )
 
-_sessions: dict[str, dict] = {}
-_anthropic_client = None
 _rate_buckets: dict[str, deque] = {}
 _auth_login_buckets: dict[str, deque] = {}
-
-
-def _get_anthropic_client():
-    global _anthropic_client
-    if _anthropic_client is None:
-        from anthropic import AsyncAnthropic
-
-        _anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    return _anthropic_client
 
 
 def _client_ip(request: Request) -> str:
@@ -133,20 +118,6 @@ def _client_ip(request: Request) -> str:
         if fwd:
             return fwd.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
-
-
-def _evict_expired_sessions(now: float) -> None:
-    expired = [sid for sid, s in _sessions.items() if now - s["last_seen"] > SESSION_TTL_SECONDS]
-    for sid in expired:
-        del _sessions[sid]
-
-
-def _enforce_session_cap() -> None:
-    if len(_sessions) <= MAX_SESSIONS:
-        return
-    oldest = sorted(_sessions.items(), key=lambda kv: kv[1]["last_seen"])
-    for sid, _ in oldest[: len(_sessions) - MAX_SESSIONS]:
-        del _sessions[sid]
 
 
 def _login_rate_limit(request: Request) -> None:
@@ -171,6 +142,12 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "microphone=(self), camera=(), geolocation=()"
+    # PWA cache policy: tell browsers to revalidate on every load via ETag.
+    # Without this, app.js / index.html can stick in the cache after a deploy
+    # and family devices keep running the old code. ETag-based 304s keep the
+    # bandwidth cost negligible.
+    if request.url.path != "/sw.js":
+        response.headers.setdefault("Cache-Control", "no-cache")
     # CSP notes:
     # - script-src is strict ('self' + GIS client only). No inline scripts.
     # - style-src includes 'unsafe-inline' because Google Identity Services
@@ -195,7 +172,7 @@ async def security_headers(request: Request, call_next):
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    if request.url.path in ("/claude", "/prompt") and request.method == "POST":
+    if request.url.path == "/chat" and request.method == "POST":
         ip = _client_ip(request)
         now = time.time()
         bucket = _rate_buckets.setdefault(ip, deque())
@@ -241,13 +218,10 @@ app.include_router(build_auth_router(_auth_config))
 verify_session = build_verify_session(_auth_config)
 
 
-class PromptRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
-
-
-class ClaudeRequest(BaseModel):
+class ChatRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=MAX_PROMPT_LENGTH)
     session_id: str = Field(..., pattern=r"^[A-Za-z0-9_-]{8,128}$")
+    lang: str = Field("", max_length=16)
 
 
 @app.post("/debug-log")
@@ -290,94 +264,69 @@ async def get_config():
     }
 
 
-@app.post("/prompt")
-async def prompt(
-    req: PromptRequest,
+@app.post("/chat")
+async def chat(
+    req: ChatRequest,
     request: Request,
     session: SessionData = Depends(verify_session),
 ):
+    """Forward an authenticated chat turn to the configured backend.
+
+    Contract — see docs/backend-contract.md for the full version.
+        Outbound (VoxGate → TARGET_URL):
+            { "user": str, "user_email": str, "session_id": str,
+              "metadata": { "lang": str, "instance": str } }
+        Inbound (TARGET_URL → VoxGate):
+            { "response": str }   — strict; anything else yields 502.
+    """
     if not TARGET_URL:
-        raise HTTPException(status_code=503, detail="No target configured")
+        raise HTTPException(status_code=503, detail="No backend configured")
 
     ip = _client_ip(request)
+    sid_short = req.session_id[:8]
     logger.info(
-        "[%s] prompt ip=%s user=%s text_len=%d",
-        INSTANCE_NAME, ip, session.email, len(req.text),
+        "[%s] chat ip=%s user=%s session=%s text_len=%d",
+        INSTANCE_NAME, ip, session.email, sid_short, len(req.text),
     )
 
+    payload = {
+        "user": req.text,
+        "user_email": session.email,
+        "session_id": req.session_id,
+        "metadata": {
+            "lang": req.lang or SPEECH_LANG,
+            "instance": INSTANCE_NAME,
+        },
+    }
     headers = {"Content-Type": "application/json"}
     if TARGET_TOKEN:
         headers["Authorization"] = f"Bearer {TARGET_TOKEN}"
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
         try:
-            res = await client.post(TARGET_URL, json={"text": req.text}, headers=headers)
+            res = await client.post(TARGET_URL, json=payload, headers=headers)
         except httpx.RequestError:
-            logger.warning("prompt_target_unreachable ip=%s", ip)
-            raise HTTPException(status_code=502, detail="Target unreachable")
+            logger.warning("backend_unreachable ip=%s", ip)
+            raise HTTPException(status_code=502, detail="Backend unreachable")
 
     if res.status_code >= 400:
-        logger.warning("prompt_target_error ip=%s status=%d", ip, res.status_code)
-        raise HTTPException(status_code=502, detail="Target returned an error")
+        logger.warning("backend_error ip=%s status=%d", ip, res.status_code)
+        raise HTTPException(status_code=502, detail="Backend returned an error")
 
     try:
         data = res.json()
     except ValueError:
-        data = {"response": res.text.strip()}
+        logger.warning("backend_non_json ip=%s", ip)
+        raise HTTPException(status_code=502, detail="Backend response was not JSON")
 
-    return JSONResponse(content=data)
+    if not isinstance(data, dict) or not isinstance(data.get("response"), str):
+        # Strict contract: backends must return {"response": "<text>"}. Anything
+        # else is treated as a contract violation, not silently passed through.
+        shape = list(data) if isinstance(data, dict) else type(data).__name__
+        logger.warning("backend_bad_shape ip=%s shape=%s", ip, shape)
+        raise HTTPException(status_code=502, detail="Backend response did not match contract")
 
-
-@app.post("/claude")
-async def claude(
-    req: ClaudeRequest,
-    request: Request,
-    session: SessionData = Depends(verify_session),
-):
-    if not ANTHROPIC_API_KEY:
-        raise HTTPException(status_code=503, detail="No Anthropic API key configured")
-
-    now = time.time()
-    _evict_expired_sessions(now)
-
-    ip = _client_ip(request)
-    sid_short = req.session_id[:8]
-    logger.info(
-        "[%s] claude ip=%s user=%s session=%s text_len=%d sessions=%d",
-        INSTANCE_NAME, ip, session.email, sid_short, len(req.text), len(_sessions),
-    )
-
-    chat = _sessions.setdefault(req.session_id, {"messages": [], "last_seen": now})
-    chat["last_seen"] = now
-    _enforce_session_cap()
-    if req.session_id not in _sessions:
-        _sessions[req.session_id] = chat
-    history = chat["messages"]
-    history.append({"role": "user", "content": req.text})
-
-    try:
-        client = _get_anthropic_client()
-        message = await client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            messages=history,
-        )
-    except Exception:
-        history.pop()
-        logger.exception("claude_api_error ip=%s session=%s", ip, sid_short)
-        raise HTTPException(status_code=502, detail="Anthropic API error")
-
-    reply = "".join(
-        block.text for block in message.content if getattr(block, "type", None) == "text"
-    )
-
-    history.append({"role": "assistant", "content": reply})
-
-    while len(history) > SESSION_MAX_MESSAGES:
-        del history[0:2]
-
-    return {"response": reply}
+    return {"response": data["response"]}
 
 
 app.mount("/", StaticFiles(directory="pwa", html=True), name="pwa")

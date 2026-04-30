@@ -7,7 +7,10 @@ item should be answerable with yes/no without reading source code.
 
 - [ ] **`GOOGLE_CLIENT_ID` is set** to the OAuth Client ID issued by the
       Google Cloud Console. Without it, login is disabled and every
-      request to `/claude` and `/prompt` is rejected.
+      request to `/chat` is rejected.
+- [ ] **`TARGET_URL` is set** and points at a backend that speaks the
+      contract in [`backend-contract.md`](backend-contract.md). Without
+      it, every authenticated `/chat` request returns `503`.
 - [ ] **`ALLOWED_EMAILS` lists every permitted user explicitly.**
       Adding/removing an entry takes effect on the next request — no
       restart needed.
@@ -18,8 +21,6 @@ item should be answerable with yes/no without reading source code.
 - [ ] **`COOKIE_SECURE=1` in production.** With `0`, browsers refuse to
       keep the session cookie over HTTPS in some configurations. Only
       use `0` for local `http://localhost` development.
-- [ ] **`ANTHROPIC_API_KEY` has a spending limit.** Set it in the
-      Anthropic console dashboard so token leaks are bounded by cost.
 - [ ] **`ALLOWED_ORIGIN` points at the real domain.** Empty = no
       browser origin may call the API. Wildcards (`*` etc.) are
       intentionally not supported.
@@ -33,21 +34,18 @@ item should be answerable with yes/no without reading source code.
 
 ## Backend-specific
 
-### When `ANTHROPIC_API_KEY` is active (`/claude`)
-
-- [ ] **API-key rotation:** the key is cached on the first `/claude`
-      call. Restart the container after rotation.
-- [ ] **`SYSTEM_PROMPT` contains no secrets.** It lives in plain text
-      inside the container — and anyone with access to `/config` or
-      logs can see it.
-
-### When `TARGET_URL` is active (`/prompt`)
-
-- [ ] **Target backend binds to `127.0.0.1`** or requires its own
-      `TARGET_TOKEN`. Otherwise VoxGate inadvertently exposes your
-      backend to the internet.
+- [ ] **Target backend binds to `127.0.0.1`** (or a private network) or
+      requires its own `TARGET_TOKEN`. Otherwise VoxGate inadvertently
+      exposes your backend to the internet.
+- [ ] **Target backend trusts `user_email`.** VoxGate verifies the
+      e-mail via Google and matches it against `ALLOWED_EMAILS` before
+      forwarding. The backend can rely on `body.user_email` for ACL
+      decisions and *should not* trust any client-supplied e-mail field.
 - [ ] **Target backend has its own backups.** VoxGate has no state
       worth backing up; the target backend may.
+- [ ] **LLM/API credentials live in the backend, not VoxGate.** VoxGate
+      has no model credentials by design. Set spending limits on those
+      keys in the relevant provider console.
 
 ## During operation
 
@@ -79,9 +77,10 @@ Active without any operator action:
   XSS cannot read them.
 - CSRF protection: every state-changing endpoint requires the
   `X-CSRF-Token` header to match the `vg_csrf` cookie (double-submit).
-- Per-IP rate limit on `/claude`, `/prompt` *and* `/auth/login/*`.
-- Session TTL and a global session cap (memory DoS protection).
+- Per-IP rate limit on `/chat` *and* `/auth/login/*`.
 - Strict `session_id` validation (`^[A-Za-z0-9_-]{8,128}$`).
+- Strict response-shape validation on TARGET_URL replies — backends
+  cannot accidentally leak unexpected fields into the PWA.
 - Strict CSP (Google Identity Services script and frame allowed only at
   `/gsi/*`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
   `Referrer-Policy`, `Permissions-Policy` (microphone only).
@@ -105,8 +104,6 @@ replacement.
 
 ## Residual risks
 
-- **In-memory chat sessions:** `/claude` history lives in the process.
-  Restarts drop it. Intentional.
 - **Per-IP rate limit only:** behind NAT/CGNAT users share the quota.
 - **Dependency on Google availability:** during a Google Identity
   Services outage, no one can log in. The session cookie remains valid

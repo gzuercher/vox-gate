@@ -14,8 +14,8 @@ Procedure:
 1. Run `make check` (lint + tests).
 2. Verify that `make run` (or `uvicorn server:app`) starts the server
    without errors.
-3. Smoke-test `GET /config` and the auth path on `POST /prompt`
-   (expect 401 without token).
+3. Smoke-test `GET /config` and the auth path on `POST /chat`
+   (expect 401 without a valid session cookie).
 
 Report:
 - ✅ All passed (with summary).

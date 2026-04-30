@@ -32,7 +32,7 @@ The binding rules live in `.claude/rules/` and apply to both human contributors 
 In addition:
 
 - **Linter:** `ruff` — config in `pyproject.toml`, line length 100. `make lint` must be green.
-- **Tests:** every new endpoint needs pytest tests in `tests/`. Mock external calls (Anthropic, httpx) — no real API calls in tests.
+- **Tests:** every new endpoint needs pytest tests in `tests/`. Mock external calls (httpx outbound) — no real network in tests.
 - **Imports:** prefer absolute paths.
 - **No new dependencies** without discussion. VoxGate should stay lightweight.
 
@@ -47,10 +47,11 @@ In addition:
 
 1. Define the Pydantic request model in `server.py` (`Field(..., min_length=1, max_length=…)`).
 2. Protect the endpoint with `session: SessionData = Depends(verify_session)` if auth is required. The dependency validates the signed `vg_session` cookie *and* the `X-CSRF-Token` header against the `vg_csrf` cookie. The PWA helper `VoxGateAuth.withAuthHeaders(...)` wires the header automatically.
-3. Wrap external calls in a function so tests can mock them (see `_get_anthropic_client`).
+3. Wrap external calls in a function so tests can patch them (see how `tests/test_server.py` patches `httpx.AsyncClient`).
 4. Add tests in `tests/test_server.py` — at minimum: happy path, validation errors, auth errors (no session, missing CSRF), backend errors.
 5. Document the endpoint in `README.md` under "API reference".
 6. If a new env variable is introduced: extend `.env.example`, `deploy/caddy/.env.example`, and the configuration table in `docs/setup.md`.
+7. If the change affects the `/chat` → TARGET_URL forwarding contract, update `docs/backend-contract.md` *first* — that file is the source of truth for backend implementers.
 
 ## Working with Claude Code
 

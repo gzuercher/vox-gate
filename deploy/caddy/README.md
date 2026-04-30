@@ -15,8 +15,8 @@ to VoxGate. The VoxGate container is reachable only through Caddy.
 ```bash
 cd deploy/caddy
 cp .env.example .env
-# At minimum set VOXGATE_DOMAIN, ACME_EMAIL, and either
-# ANTHROPIC_API_KEY or TARGET_URL.
+# Required: VOXGATE_DOMAIN, ACME_EMAIL, GOOGLE_CLIENT_ID,
+# ALLOWED_EMAILS, TARGET_URL.
 docker compose up -d
 ```
 
@@ -34,9 +34,9 @@ Open `https://voxgate.example.com` in the browser. The PWA shows a
 
 ## Customisation
 
-- **Multiple instances** (e.g. one for Claude, one for a custom bot):
-  copy the compose file, add a second `voxgate-*` service, extend the
-  `Caddyfile` with another hostname block.
+- **Multiple instances** (e.g. one for the family planner, one for a
+  recipe bot): copy the compose file, add a second `voxgate-*` service,
+  extend the `Caddyfile` with another hostname block.
 - **CSP**: VoxGate sets its own Content-Security-Policy. Do not add a
   separate `header Content-Security-Policy …` directive in the
   Caddyfile — it would collide with the server-side one.
@@ -45,4 +45,5 @@ Open `https://voxgate.example.com` in the browser. The PWA shows a
 
 - All env vars: [`../../docs/setup.md`](../../docs/setup.md)
 - Security checklist: [`../../docs/security.md`](../../docs/security.md)
-- `/prompt` backend examples: [`../../docs/backends.md`](../../docs/backends.md)
+- Backend JSON contract: [`../../docs/backend-contract.md`](../../docs/backend-contract.md)
+- Example backend implementations: [`../../docs/backends.md`](../../docs/backends.md)

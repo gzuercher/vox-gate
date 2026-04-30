@@ -1,57 +1,97 @@
 # Backend examples
 
-VoxGate has two endpoints:
+VoxGate has one chat endpoint, `/chat`. Every authenticated request is
+forwarded to `TARGET_URL` using the strict JSON contract documented in
+[`backend-contract.md`](backend-contract.md). Read that first — this
+file shows minimal implementations that fulfil the contract.
 
-- **`/claude`** — VoxGate calls the Anthropic API itself. You only
-  need `ANTHROPIC_API_KEY` in `.env`.
-- **`/prompt`** — VoxGate forwards the text to `TARGET_URL`. You write
-  the backend yourself (or use one of the examples below).
-
-## `/prompt` backends
-
-VoxGate sends:
+What VoxGate sends:
 
 ```
 POST <TARGET_URL>
-Authorization: Bearer <TARGET_TOKEN>      # if set
+Authorization: Bearer <TARGET_TOKEN>      # only if TARGET_TOKEN is set
 Content-Type: application/json
 
-{"text": "voice input as text"}
+{
+  "user":        "voice or typed input",
+  "user_email":  "alice@example.com",
+  "session_id":  "550e8400-e29b-41d4-a716-446655440000",
+  "metadata":    { "lang": "de-CH", "instance": "VoxGate" }
+}
 ```
 
-and expects JSON back with a `response` (or `text`) field.
+What VoxGate expects back, **strictly**:
 
-> ⚠️ Bind your backend only to `127.0.0.1`, or require a `TARGET_TOKEN`
-> of its own. Otherwise VoxGate inadvertently exposes your backend to
-> the internet.
+```json
+{ "response": "<assistant reply, plain string>" }
+```
 
-### Python / FastAPI — Claude Code wrapper
+Anything else surfaces as `502` to the PWA — no silent passthrough.
 
-Calls the Claude CLI as a subprocess. With `--continue` the
-conversation context is preserved:
+> ⚠️ Bind your backend only to `127.0.0.1` (or a private network), or
+> require a `TARGET_TOKEN` of its own. Otherwise VoxGate inadvertently
+> exposes your backend to the internet.
+
+## Python / FastAPI — minimal echo
 
 ```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-import subprocess
+from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-class Req(BaseModel):
-    text: str
-
-@app.post("/prompt")
-async def prompt(req: Req):
-    result = subprocess.run(
-        ["claude", "-p", "--continue", req.text],
-        capture_output=True, text=True, timeout=120,
-    )
-    return {"response": result.stdout.strip()}
+@app.post("/")
+async def chat(req: Request):
+    body = await req.json()
+    user = body["user"]
+    email = body["user_email"]
+    return {"response": f"hello {email}, you said: {user}"}
 ```
 
 Run: `uvicorn app:app --host 127.0.0.1 --port 9000`
 
-### Node / Express — echo plus logic
+VoxGate `.env`: `TARGET_URL=http://127.0.0.1:9000/`.
+
+## Python / FastAPI — voice-to-Claude adapter
+
+A small adapter that forwards to the Anthropic API. This used to be
+built into VoxGate; it now lives in your backend so VoxGate stays
+LLM-agnostic.
+
+```python
+import os
+from fastapi import FastAPI, Request
+from anthropic import AsyncAnthropic
+
+app = FastAPI()
+client = AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+# Per-session in-memory history, keyed by VoxGate's session_id.
+HISTORY: dict[str, list[dict]] = {}
+MAX_TURNS = 20
+
+@app.post("/")
+async def chat(req: Request):
+    body = await req.json()
+    sid = body["session_id"]
+    history = HISTORY.setdefault(sid, [])
+    history.append({"role": "user", "content": body["user"]})
+    msg = await client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=1024,
+        system="You are a helpful assistant. Answer concisely.",
+        messages=history,
+    )
+    reply = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+    history.append({"role": "assistant", "content": reply})
+    while len(history) > MAX_TURNS:
+        del history[0:2]
+    return {"response": reply}
+```
+
+`pip install fastapi uvicorn anthropic`. Run on a private port and
+configure `TARGET_URL=http://127.0.0.1:9000/` in VoxGate's `.env`.
+
+## Node / Express — echo
 
 ```javascript
 import express from "express";
@@ -59,107 +99,52 @@ import express from "express";
 const app = express();
 app.use(express.json());
 
-app.post("/prompt", (req, res) => {
-  const text = req.body.text ?? "";
-  // plug in your own logic here
-  res.json({ response: `You said: ${text}` });
+app.post("/", (req, res) => {
+  const { user, user_email } = req.body;
+  res.json({ response: `Hello ${user_email}, you said: ${user}` });
 });
 
 app.listen(9000, "127.0.0.1");
 ```
 
-### Bash + curl — quick test stub
+## Bash + nc — test stub
 
 ```bash
 #!/usr/bin/env bash
-# Tiny HTTP responder via socat/ncat. Test use only.
+# Tiny HTTP responder. Test use only — does not parse the request body.
 while true; do
   printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s' \
     '{"response":"ok"}' | nc -l -p 9000 -q 1
 done
 ```
 
-### Your own service (e.g. zursetti-planner)
+## Your own service
 
-If your service already has an HTTP API, just add a `/prompt` endpoint
-that fulfils the contract:
+If your service already has an HTTP API (e.g. a planner with its own
+business logic), give it an endpoint that accepts the contract above
+and returns `{"response": "..."}`. The `user_email` field is verified
+by VoxGate via Google Sign-In; backends can rely on it for ACL
+decisions and *should not* trust any client-provided e-mail.
 
-```
-POST /prompt        →   {"response": "..."}
-```
+## Authentication scheme reminder
 
-VoxGate is agnostic to what happens inside the backend (database,
-in-house LLM calls, tool use, etc.).
+VoxGate is the auth boundary. By the time a request arrives at your
+backend:
 
-## `/claude` clients
+- The user's e-mail has been verified by Google.
+- The e-mail is on the operator's `ALLOWED_EMAILS` list.
+- CSRF and Origin checks have already passed.
 
-If you want to use VoxGate **as** a backend (e.g. to reach Claude with
-a voice/TTS wrapper from your own app):
+The backend can therefore trust `user_email` and treat the request as
+an authorised action by that user.
 
-### curl
-
-VoxGate authenticates with cookies set by `POST /auth/login/google`
-(plus a CSRF header on every POST). For scripted access, persist
-cookies in a jar and forward the `vg_csrf` cookie value in the header:
-
-```bash
-# 1) Log in once and store cookies. ID_TOKEN is a Google ID token your
-#    script obtained out-of-band (e.g. via a service-account flow).
-curl -c cookies.txt -X POST https://voxgate.example.com/auth/login/google \
-  -H "Content-Type: application/json" \
-  -d "{\"id_token\": \"$ID_TOKEN\"}"
-
-# 2) Use the cookies + CSRF header for subsequent calls.
-CSRF=$(awk '$6=="vg_csrf"{print $7}' cookies.txt)
-curl -b cookies.txt -X POST https://voxgate.example.com/claude \
-  -H "X-CSRF-Token: $CSRF" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "What is the capital of Senegal?",
-    "session_id": "my-app-session-001"
-  }'
-```
-
-`session_id` must match `^[A-Za-z0-9_-]{8,128}$`. Keep it stable per
-conversation thread — VoxGate retains up to 20 messages in memory per
-session.
-
-### Browser snippet
-
-```javascript
-function getCookie(name) {
-  const parts = ('; ' + document.cookie).split('; ' + name + '=');
-  return parts.length < 2 ? '' : parts.pop().split(';').shift();
-}
-
-async function ask(text) {
-  const res = await fetch("https://voxgate.example.com/claude", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": getCookie("vg_csrf"),
-    },
-    body: JSON.stringify({
-      text,
-      session_id: localStorage.sessionId ?? crypto.randomUUID(),
-    }),
-  });
-  const { response } = await res.json();
-  return response;
-}
-```
-
-VoxGate manages the history — you only pass `text` and a stable
-`session_id`.
-
-## Error codes
+## Error codes (PWA-visible)
 
 | Code | Meaning |
 |---|---|
 | 401 | Not signed in (cookie missing or expired). |
-| 403 | Either the user is not in `ALLOWED_EMAILS`, or the `X-CSRF-Token` header is missing/wrong. |
+| 403 | E-mail not in `ALLOWED_EMAILS`, CSRF missing/wrong, or cross-origin. |
 | 422 | Validation failed (e.g. `text` too long/empty, `session_id` invalid). |
 | 429 | Rate limit exceeded. |
-| 502 | Backend (Anthropic or your `TARGET_URL`) returned an error. |
-| 503 | Backend not configured (`ANTHROPIC_API_KEY` or `TARGET_URL` empty). |
+| 502 | Backend unreachable, errored, or violated the response contract. |
+| 503 | TARGET_URL not configured. |

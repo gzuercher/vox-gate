@@ -3,8 +3,10 @@
 Installation, configuration, and operation. For what VoxGate *does* see
 [`../README.md`](../README.md). For development workflow see
 [`contributing.md`](contributing.md). For the operator security
-checklist see [`security.md`](security.md). For backend examples see
-[`backends.md`](backends.md).
+checklist see [`security.md`](security.md). For the JSON contract
+between VoxGate and your backend see
+[`backend-contract.md`](backend-contract.md). For example backend
+implementations see [`backends.md`](backends.md).
 
 ## Which variant?
 
@@ -21,8 +23,7 @@ checklist see [`security.md`](security.md). For backend examples see
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate
 cp .env.example .env
-# Required: set GOOGLE_CLIENT_ID and ALLOWED_EMAILS.
-# Optional: set ANTHROPIC_API_KEY, TARGET_URL.
+# Required: GOOGLE_CLIENT_ID, ALLOWED_EMAILS, TARGET_URL.
 docker compose up -d
 ```
 
@@ -56,7 +57,7 @@ cookies on the response:
   reads it.
 - `vg_csrf` — readable from JavaScript. The PWA copies its value into
   an `X-CSRF-Token` header on every state-changing request
-  (`POST /claude`, `POST /prompt`, `POST /auth/logout`).
+  (`POST /chat`, `POST /auth/logout`).
 
 The server's `verify_session` dependency requires that the
 `X-CSRF-Token` header equals the `vg_csrf` cookie *and* that both
@@ -81,18 +82,24 @@ For programmatic clients, see the curl example in
 The same Client ID can serve every VoxGate instance — just add each
 domain to **Authorized JavaScript origins**.
 
-Plus at least one backend:
+### Required (backend)
 
 | Variable | Description |
 |---|---|
-| `ANTHROPIC_API_KEY` | Anthropic key — enables `/claude` (direct Claude with session history). |
-| `TARGET_URL` | Custom HTTP backend URL — enables `/prompt` (stateless forwarding). |
+| `TARGET_URL` | URL of the chat backend. VoxGate POSTs the strict JSON contract here for every authenticated `/chat` request. Without it, `/chat` returns `503`. See [`backend-contract.md`](backend-contract.md). |
+| `TARGET_TOKEN` | Optional bearer token added as `Authorization: Bearer <token>` on the forwarded request. Leave empty if the backend needs no auth. |
+
+VoxGate has no built-in LLM client. If you want voice-to-Claude (or
+voice-to-OpenAI, voice-to-anything), run a small adapter container
+that exposes a single endpoint speaking the
+[backend contract](backend-contract.md) and forwards on to the model
+provider.
 
 ### Branding
 
 | Variable | Default | Description |
 |---|---|---|
-| `INSTANCE_NAME` | `VoxGate` | Technical identifier of the instance. Used in logs and as a fallback for the UI title. |
+| `INSTANCE_NAME` | `VoxGate` | Technical identifier of the instance. Used in logs and forwarded to the backend as `metadata.instance` so one backend can serve multiple frontends. |
 | `INSTANCE_DISPLAY_NAME` | *(empty → falls back to `INSTANCE_NAME`)* | Human-friendly title shown in the header and browser tab. Set this to a readable name (e.g. `"ZPlanner Voice"`). |
 | `INSTANCE_COLOR` | `#c8ff00` | Accent color (hex). Drives focus rings, status dot, active borders. |
 | `SPEECH_LANG` | `de-CH` | Default language tag (BCP-47). Initial selection if the visitor has no stored preference and the browser/OS language is not in `SPEECH_LANGS`. |
@@ -115,16 +122,11 @@ sessions — flip back to `DEBUG_ENABLED=0` when done.
 
 | Variable | Default | Description |
 |---|---|---|
-| `SYSTEM_PROMPT` | *helpful assistant…* | System prompt for `/claude`. |
-| `CLAUDE_MODEL` | `claude-sonnet-4-5` | Anthropic model ID. |
-| `TARGET_TOKEN` | *(empty)* | Bearer token forwarded to `TARGET_URL`. |
-| `MAX_PROMPT_LENGTH` | `4000` | Maximum text length. |
-| `REQUEST_TIMEOUT` | `120` | Outbound request timeout (seconds). |
+| `MAX_PROMPT_LENGTH` | `4000` | Maximum text length per request. |
+| `REQUEST_TIMEOUT` | `120` | Outbound request timeout to TARGET_URL (seconds). |
 | `ALLOWED_ORIGIN` | *(empty, blocked)* | Allowed CORS origin. |
-| `RATE_LIMIT_PER_MINUTE` | `30` | Requests per IP per minute for `/claude` and `/prompt`. |
+| `RATE_LIMIT_PER_MINUTE` | `30` | Requests per IP per minute for `/chat`. |
 | `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` | `10` | Requests per IP per minute for `/auth/login/*`. |
-| `SESSION_TTL_SECONDS` | `1800` | Lifetime of an idle chat session (in-memory `/claude` history). |
-| `MAX_SESSIONS` | `1000` | Global cap on concurrent chat sessions. |
 | `TRUST_PROXY_HEADERS` | `0` | Set to `1` behind Caddy/Nginx (X-Forwarded-For). See "Reverse proxy". |
 
 ## Reverse proxy
@@ -244,9 +246,9 @@ In `.env`: `TRUST_PROXY_HEADERS=1` and
 ## Multi-instance (advanced)
 
 Several VoxGate instances on the same host — for example a green PWA
-"Claude" (direct Anthropic) and a blue PWA "Dokbot" (forwards to a
-custom backend). Each instance is its own container with its own port,
-env vars, and PWA icon.
+"Family planner" pointing at one backend and a blue PWA "Recipe bot"
+pointing at another. Each instance is its own container with its own
+port, env vars, and PWA icon.
 
 **This is for distinct backends or distinct user groups, not for
 multiple human languages.** Speech recognition language, TTS voice and
@@ -258,44 +260,44 @@ instance, e.g.:
 
 ```yaml
 services:
-  claude:
+  planner:
     build: .
     ports:
       - "8001:8000"
     environment:
-      - INSTANCE_NAME=Claude
+      - INSTANCE_NAME=Planner
       - INSTANCE_COLOR=#c8ff00
       - SPEECH_LANG=de-CH
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - ALLOWED_EMAILS=${ALLOWED_EMAILS_CLAUDE}
-      - SESSION_SECRET=${SESSION_SECRET_CLAUDE}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS_PLANNER}
+      - SESSION_SECRET=${SESSION_SECRET_PLANNER}
       - COOKIE_SECURE=1
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SYSTEM_PROMPT=${SYSTEM_PROMPT_CLAUDE:-}
-      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN_CLAUDE:-}
+      - TARGET_URL=${TARGET_URL_PLANNER}
+      - TARGET_TOKEN=${TARGET_TOKEN_PLANNER:-}
+      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN_PLANNER:-}
       - TRUST_PROXY_HEADERS=1
     restart: unless-stopped
 
-  dokbot:
+  recipes:
     build: .
     ports:
       - "8002:8000"
     environment:
-      - INSTANCE_NAME=Dokbot
+      - INSTANCE_NAME=Recipes
       - INSTANCE_COLOR=#00b4d8
       - SPEECH_LANG=de-CH
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - ALLOWED_EMAILS=${ALLOWED_EMAILS_DOKBOT}
-      - SESSION_SECRET=${SESSION_SECRET_DOKBOT}
+      - ALLOWED_EMAILS=${ALLOWED_EMAILS_RECIPES}
+      - SESSION_SECRET=${SESSION_SECRET_RECIPES}
       - COOKIE_SECURE=1
-      - TARGET_URL=${TARGET_URL_DOKBOT:-http://host.docker.internal:9001/prompt}
-      - TARGET_TOKEN=${TARGET_TOKEN_DOKBOT:-}
-      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN_DOKBOT:-}
+      - TARGET_URL=${TARGET_URL_RECIPES}
+      - TARGET_TOKEN=${TARGET_TOKEN_RECIPES:-}
+      - ALLOWED_ORIGIN=${ALLOWED_ORIGIN_RECIPES:-}
       - TRUST_PROXY_HEADERS=1
     restart: unless-stopped
 ```
 
-Add a Caddy block per host (`claude.example.com`, `dokbot.example.com`)
+Add a Caddy block per host (`planner.example.com`, `recipes.example.com`)
 and install each URL on the phone separately — every host becomes its
 own PWA with its own color and icon.
 
@@ -309,12 +311,11 @@ pip install -e ".[dev]"
 export GOOGLE_CLIENT_ID="123-abc.apps.googleusercontent.com"
 export ALLOWED_EMAILS="you@example.com"
 export SESSION_SECRET="$(openssl rand -hex 32)"
-export ANTHROPIC_API_KEY="sk-ant-..."
+export TARGET_URL="http://localhost:9000/"
 export INSTANCE_NAME="VoxGate"
 export ALLOWED_ORIGIN="https://voxgate.example.com"
 
 uvicorn server:app --host 127.0.0.1 --port 8000
-# Do not pass --workers N — see "Scaling" below.
 ```
 
 ## Systemd
@@ -341,60 +342,34 @@ systemctl enable --now voxgate
 journalctl -u voxgate -f
 ```
 
-For multiple instances, copy the unit (`voxgate-claude.service`,
-`voxgate-dokbot.service`) with one `EnvironmentFile` and port per copy.
+For multiple instances, copy the unit (`voxgate-planner.service`,
+`voxgate-recipes.service`) with one `EnvironmentFile` and port per copy.
 
-## Custom backend for `/prompt`
+## Custom backend for `/chat`
 
-Backend contract and examples (Python/FastAPI with Claude CLI,
-Node/Express, bash stub, browser client): [`backends.md`](backends.md).
+Backend contract (strict): [`backend-contract.md`](backend-contract.md).
+Example implementations (Python/FastAPI, Node/Express, bash stub,
+adapter to Anthropic): [`backends.md`](backends.md).
 
 ## Security
 
 Operator checklist before the public deploy: [`security.md`](security.md).
 
-## Scaling & deployment constraints
+## Scaling notes
 
-**VoxGate must run with exactly one Uvicorn worker per process.** The
-`/claude` endpoint keeps conversation history per `session_id` in an
-in-memory dict. Each worker process has its own copy — requests routed
-to different workers see different (or empty) histories. Users would
-experience sporadic "memory loss" mid-conversation.
+VoxGate itself is **stateless** — it carries no per-user data between
+requests. Sessions live in signed cookies; everything else is
+forwarded to the backend. You can run multiple containers behind a
+load balancer without sticky sessions.
 
-The shipped `Dockerfile` and `docker-compose.yml` start a single worker
-— out of the box this is fine.
-
-### Why scale at all?
-
-Three typical motives — none currently pressing for VoxGate:
-
-1. **CPU utilization.** Python's GIL limits one process to one CPU
-   core. Multiple workers can use multiple cores. Not relevant here:
-   the server is I/O-bound (it just waits for the Anthropic API).
-2. **Throughput / concurrent users.** Many simultaneously active
-   sessions could saturate one worker. A personal or family-sized
-   installation will never hit this.
-3. **High availability.** Multiple containers behind a load balancer
-   survive the loss of any single instance.
-
-### Implications
-
-- Do **not** set `--workers N` (N > 1) on `uvicorn`.
-- Do **not** put multiple VoxGate containers behind a load balancer
-  with `/claude` enabled, unless sticky sessions are configured.
-- Histories are lost on container restart — intentional for a
-  lightweight install.
-- `/prompt` is stateless and unaffected.
-
-### Migration path (if scaling becomes necessary)
-
-Move the `_sessions` dict out of process memory into a shared store —
-Redis is the standard choice. Adds a dependency and requires reworking
-`server.py`.
+The single-process `Dockerfile` and `docker-compose.yml` are the
+default. Add `--workers N` to `uvicorn` if you need more throughput;
+the backend at TARGET_URL is the more likely bottleneck.
 
 ## Maintenance
 
 - **Logs:** `docker compose logs -f` or `journalctl -u voxgate -f`
 - **Update:** `git pull && docker compose build && docker compose up -d`
-- **Sessions:** kept in memory; lost on restart. Intentional.
-- **Anthropic costs:** monitor at console.anthropic.com; set spending limits.
+- **Sessions:** signed cookies, no server-side state. Restart-safe.
+- **Backend costs/limits:** that is the backend's problem now — VoxGate
+  doesn't know about model pricing.

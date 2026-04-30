@@ -29,12 +29,16 @@ estimated time:
   accent, so no server change needed.
 
 ### Streaming responses (SSE)
-- **Value:** Claude replies start playing/showing within ~500 ms instead
-  of after the full response. The single biggest perceived-quality win
-  in the document — without it VoxGate feels noticeably slower than
-  ChatGPT-style apps, and the gap grows with longer answers.
-- **Cost:** server: switch `/claude` to SSE; PWA: incremental TTS plus
-  text accumulation. Modest. The tricky part is making
+- **Value:** backend replies start playing/showing within ~500 ms
+  instead of after the full response. The single biggest
+  perceived-quality win in the document — without it VoxGate feels
+  noticeably slower than ChatGPT-style apps, and the gap grows with
+  longer answers.
+- **Cost:** **contract change.** Today the backend returns one JSON
+  object; for streaming we'd extend the contract to allow SSE or
+  chunked transfer-encoding from TARGET_URL, with VoxGate forwarding
+  chunks to the PWA. Backends would need to opt in. PWA: incremental
+  TTS plus text accumulation. The tricky part is making
   `speechSynthesis` speak partial sentences without sounding chopped.
 
 ### Additional identity providers (Microsoft, Apple, generic OIDC)
@@ -56,39 +60,19 @@ estimated time:
   fallback) is a separate item under Normal.
 
 ### Image / camera input
-- **Value:** point phone camera at something, ask Claude about it.
-  Multimodal is one of Claude's strengths and currently unused. Phone
-  camera is the natural use case for a voice gateway on the phone.
-- **Cost:** UI: capture button + preview. Server: image upload, base64
-  encode for Anthropic API. Privacy considerations (where does the
-  image live, audit log, etc.).
+- **Value:** point phone camera at something, ask the backend about it.
+  Multimodal is a natural fit for a phone voice gateway, currently
+  unused. Whether the backend's LLM supports vision is the backend's
+  problem.
+- **Cost:** **contract change.** PWA: capture button + preview. Server:
+  image upload path (base64 in JSON, or multipart). Extension to the
+  TARGET_URL contract (e.g. `attachments: [{mime, data}]`). Privacy
+  considerations (where does the image live, audit log, etc.) move
+  to the backend along with the data.
 
 ---
 
 ## Normal
-
-### Conversation history persistence (per session, per user)
-- **Value:** restart no longer wipes ongoing threads. Phone reload
-  doesn't lose context.
-- **Cost:** persist `_sessions` to disk (SQLite or a JSON file in a
-  mounted volume). Requires a mounted volume in compose.
-- **Constraint — opt-in only:** the README, `docs/setup.md`, and
-  `docs/security.md` currently advertise "nothing is persisted" as an
-  intentional property (no disk leak, no backup duty, no GDPR storage
-  obligation). Persistence must therefore ship behind an env switch,
-  e.g. `SESSION_STORE=memory|sqlite` with `memory` as the default.
-  Existing users keep the original contract; opt-in users accept the
-  new one.
-- **Doc updates required when shipped:** the three "intentional, lost
-  on restart" passages must be rewritten to describe both modes. The
-  security checklist gains a new item ("if `SESSION_STORE=sqlite`,
-  back up and protect `/data/sessions.db` like personal data").
-
-### Configurable system-prompt presets
-- **Value:** quickly switch between "concise assistant", "language
-  tutor", "pirate" etc. without rebuilding the container.
-- **Cost:** UI: small dropdown next to the language toggle. Server:
-  `SYSTEM_PROMPTS` env as named map. Cheap; fits the spirit.
 
 ### Server-side STT fallback (Whisper)
 - **Value:** unlocks iOS/Safari and any browser with weak Web Speech
@@ -103,14 +87,6 @@ estimated time:
   OpenAI TTS / Azure produce reliably good audio across phones.
 - **Cost:** another external dependency, another API key, latency, per-
   request cost. Streaming support needed to keep perceived speed.
-
-### Conversation export and search
-- **Value:** voice conversations are ephemeral by default; users may
-  want to revisit, share, export to markdown. Search across past
-  conversations.
-- **Cost:** depends on conversation persistence (above) being shipped
-  first. Search at trivial scale is `LIKE %query%`; at non-trivial
-  scale needs FTS5 or similar.
 
 ### Edge-pre-auth bundle
 - **Value:** ship `deploy/caddy-private/` with Basic Auth or
@@ -131,13 +107,14 @@ estimated time:
   cannot really do reliably. Native app dependency. Privacy theatre
   unless local — and local wake-word adds yet another dependency.
 
-### Multi-user / family profiles with per-user data
-- **Value:** different chat histories, settings, voices per user;
-  per-user Anthropic budget tracking. Login already identifies users by
-  Google e-mail, so the foundation is in place.
-- **Cost:** persist `_sessions` keyed by `(user_email, session_id)`,
-  add per-user budget tracking, build a minimal settings UI. Account UI
-  / password reset are *not* needed — Google handles them.
+### Per-user UI settings (lang, voice, mute)
+- **Value:** today these are device-local (`localStorage`). Multi-device
+  users would benefit from server-side preferences keyed by
+  `user_email`. Login already identifies users, so the foundation is
+  in place.
+- **Cost:** small server-side store (`/auth/me` extended with
+  `preferences`), small settings UI in the PWA. Backend stays
+  uninvolved — preferences are a VoxGate-only concern.
 
 ---
 
@@ -152,20 +129,21 @@ why:
   is not core to "voice in, voice out".
 - **Token in URL (`?key=…`) for easy sharing.** Security antipattern.
   Tokens leak via referer headers, browser history, and access logs.
-- **Multi-worker uvicorn with sticky sessions.** The single-worker
-  constraint is documented and intentional. If scaling ever becomes
-  necessary, the right move is Redis-backed session storage, not
-  sticky load-balancing (see `docs/setup.md` "Migration path").
 - **Bundling cloudflared/Tailscale as docker-compose recipes.** The
   upstream tools have excellent setup UIs and docs. We point at them
   in `docs/setup.md` instead of duplicating moving targets.
 - **Built-in MCP-server bridge.** Voice-driven tool execution would
-  turn VoxGate from a 250-line voice forwarder into a multi-round
+  turn VoxGate from a small voice forwarder into a multi-round
   tool-use orchestrator with its own security perimeter, allowlists,
   and connection management. The right place for that complexity is
-  the user's own `/prompt` backend: it can speak MCP, do tool-use
-  loops with Claude internally, and hand VoxGate just the final
-  reply. VoxGate stays small.
+  the user's own `/chat` backend: it can speak MCP, do tool-use loops
+  with the LLM internally, and hand VoxGate just the final reply.
+  VoxGate stays small.
+- **Built-in LLM integration (Claude/OpenAI/etc.).** Removed in
+  the 2026-04-30 refactor. VoxGate is a voice + auth gateway, not an
+  LLM client. If you want voice-to-Claude, run a small adapter
+  container behind TARGET_URL — that pattern keeps the LLM choice,
+  pricing, and credentials out of VoxGate entirely.
 - **Local-only mode (Whisper.cpp + llama.cpp + Piper).** Different
   deployment story (model downloads, GPU/CPU choices, far lower
   reply quality), different audience, and a completely separate
@@ -173,7 +151,7 @@ why:
   project ("VoxGate Local"), not a flag inside this one.
 - **Plugin / skill ecosystem.** Plugin protocols, sandboxing,
   versioning, and distribution would turn VoxGate into a platform.
-  Custom capabilities belong in the user's `/prompt` backend, where
+  Custom capabilities belong in the user's `/chat` backend, where
   they can be as small or as elaborate as needed without VoxGate
   carrying the maintenance.
 - **Hosted SaaS offering.** Abuse handling, payment, GDPR, on-call —
@@ -186,9 +164,8 @@ why:
 
 1. When picking work, prefer **Höher** over Normal unless there is an
    explicit reason to jump.
-2. Before starting any item, write a short plan (in
-   `~/.claude/plans/` or as a GitHub issue) — the roadmap entry is
-   not a spec.
+2. Before starting any item, write a short plan — the roadmap entry
+   is not a spec.
 3. When something here turns out to be a bad idea, delete it and
    record why. Stale items rot the document.
 4. Add new ideas with the same value/cost framing. Vague ideas

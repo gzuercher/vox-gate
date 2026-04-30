@@ -578,10 +578,10 @@
     setStatus('sending');
 
     try {
-      const res = await fetch('/claude', VoxGateAuth.withAuthHeaders({
+      const res = await fetch('/chat', VoxGateAuth.withAuthHeaders({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, session_id: sessionId })
+        body: JSON.stringify({ text, session_id: sessionId, lang: activeLang() })
       }));
 
       if (res.status === 401) {
@@ -598,7 +598,14 @@
       }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      const reply = data.response || data.text || JSON.stringify(data);
+      // Strict contract: backend must return {"response": "<string>"}. The
+      // server enforces this and rejects malformed responses with 502, so
+      // by the time we get here the field is guaranteed — but we still
+      // guard defensively in case of future API drift.
+      if (typeof data.response !== 'string') {
+        throw new Error('Malformed response from server');
+      }
+      const reply = data.response;
 
       typingDiv.classList.remove('typing');
       typingDiv.querySelector('.message-bubble').textContent = reply;

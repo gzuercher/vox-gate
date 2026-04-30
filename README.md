@@ -1,21 +1,30 @@
 # VoxGate
 
-**Talk to Claude (or another chatbot) by voice — straight from your phone.**
+**Talk to your chatbot by voice — straight from your phone.**
 
-VoxGate is a small web app you install on your phone home screen like a
-native app. Tap the mic, speak, and hear the answer read back to you.
+VoxGate is a small voice-frontend PWA you install on your phone home
+screen like a native app. Tap the mic, speak, and hear the answer read
+back to you. VoxGate authenticates the speaker (Google Sign-In + an
+operator-controlled allowlist) and forwards each turn to a backend you
+configure via `TARGET_URL`. The backend owns all LLM logic.
+
+VoxGate has **no built-in LLM integration**. There is no Claude/OpenAI
+client inside; if you want voice-to-Claude, run a small adapter
+container behind `TARGET_URL` that speaks the contract below. The
+project is deliberately a thin, opinionated voice + auth shell.
 
 ## Languages
 
-VoxGate is language-agnostic by design — Claude itself replies in any
-language you speak. The UI offers a small selectable set (default:
-German, French, Italian, English, Spanish — Swiss locales for the
-first three). What actually works depends on three independent layers:
+VoxGate is language-agnostic by design — your backend (and the LLM
+behind it) can answer in any language you speak. The UI offers a small
+selectable set (default: German, French, Italian, English, Spanish —
+Swiss locales for the first three). What actually works depends on
+three independent layers:
 
 | Layer | What it does | Caveats |
 |---|---|---|
 | **Speech recognition** | Browser converts your voice to text | Standard variants only — no Schwyzerdütsch / regional dialects. Quality varies by browser (Chrome best, Safari/iOS limited). |
-| **LLM (Claude)** | Understands and answers | Multilingual; not a limit here. |
+| **Backend** | Understands and answers | Whatever your TARGET_URL routes to. |
 | **TTS (read-aloud)** | Browser speaks the response | Depends on the voices installed on the device. The locale tag (`de-CH`, `fr-CH`, …) is a *preference*, not a guarantee. |
 
 The selectable list is configurable via `SPEECH_LANGS` (see
@@ -23,35 +32,30 @@ The selectable list is configurable via `SPEECH_LANGS` (see
 
 ## What do you want to do?
 
-### A) Talk to Claude by voice — own (sub-)domain
+### A) Voice-frontend on your own (sub-)domain
 
-Recommended path. You need a subdomain pointing at your server and an
-Anthropic API key.
+Recommended path. You need a subdomain pointing at your server and a
+backend that speaks the [contract](docs/backend-contract.md).
 
 ```bash
 git clone git@github.com:gzuercher/vox-gate.git
 cd vox-gate/deploy/caddy
 cp .env.example .env
-# Fill in: VOXGATE_DOMAIN, ACME_EMAIL, ANTHROPIC_API_KEY
+# Fill in: VOXGATE_DOMAIN, ACME_EMAIL, GOOGLE_CLIENT_ID, ALLOWED_EMAILS,
+# TARGET_URL.
 docker compose up -d
 ```
 
 Caddy fetches a Let's Encrypt certificate automatically. Details:
 [`deploy/caddy/README.md`](deploy/caddy/README.md).
 
-### B) Reach your own bot by voice (e.g. a planner)
-
-Same setup as A, but instead of `ANTHROPIC_API_KEY` you set
-`TARGET_URL` pointing at your backend. Your backend implements a small
-HTTP contract — see [`docs/backends.md`](docs/backends.md).
-
-### C) Existing reverse-proxy infra (Traefik, Kubernetes, nginx)
+### B) Existing reverse-proxy infra (Traefik, Kubernetes, nginx)
 
 Use the root `docker-compose.yml`. It only ships the VoxGate container;
 cert handling and hostname routing happen in your infra. Notes:
 [`docs/setup.md`](docs/setup.md#reverse-proxy).
 
-### D) No domain of your own (Cloudflare Tunnel / Tailscale Funnel)
+### C) No domain of your own (Cloudflare Tunnel / Tailscale Funnel)
 
 VoxGate works behind any tunnel — Cloudflare or Tailscale provide HTTPS
 and a hostname. Concept and pointers to the official setups:
@@ -66,10 +70,13 @@ After installing the PWA on your home screen, open it:
 | Element | Function |
 |---|---|
 | **Mic button (large)** | Tap to start recording. Tap again to send. |
-| **Language (top left)** | Switch between `DE-CH` and `FR-CH`. Persisted. |
-| **Speaker (top right)** | Mute/unmute speech output. |
+| **Transcript box** | Editable any time — tap to type, mix with voice freely. |
+| **Clear (✕)** | Wipes the transcript and returns to idle. |
+| **Language (top left)** | Switch UI language. Persisted. |
+| **Speaker (header)** | Mute/unmute speech output. |
+| **Logout (header, 🚪)** | Sign out. Visible only when signed in. |
 | **Status dot (top right)** | Green = ready, blinking = sending, red = error. |
-| **New conversation (bottom)** | Reset the conversation history. |
+| **New conversation (bottom)** | Start a new session id (your backend may use this to reset history). |
 
 Replies are read aloud automatically unless muted. If you tap the mic
 again while audio is playing, the current speech is cancelled.
@@ -93,8 +100,6 @@ again while audio is playing, the current speech is cancelled.
 
 If you deploy multiple instances on different hostnames, repeat for
 each — every URL becomes its own PWA with its own color.
-
-To switch accounts or sign out, tap the **VoxGate logo** in the header.
 
 ## Access (operator + user)
 
@@ -131,8 +136,8 @@ Access, Tailscale-only access) is independently possible — see
 | `401` error | Session expired or missing. The PWA shows the Google Sign-In screen automatically. |
 | `403` error | Your Google account is not in `ALLOWED_EMAILS` (ask the operator) or your session was revoked. |
 | `429` error | Rate limit hit. Wait and retry. |
-| `503` on `/claude` | Anthropic backend not configured — set `ANTHROPIC_API_KEY`. |
-| Conversation suddenly "forgets" | Server restart — sessions are in-memory by design. |
+| `502` on `/chat` | Backend at TARGET_URL returned an error, was unreachable, or violated the response contract (see `docs/backend-contract.md`). |
+| `503` on `/chat` | TARGET_URL is not configured. |
 | Doesn't work on Safari/iOS | Web Speech API is limited there; use Chrome. |
 
 ---
@@ -140,30 +145,36 @@ Access, Tailscale-only access) is independently possible — see
 The rest is reference material for developers and clients calling the
 HTTP API. For installation/operation see [`docs/setup.md`](docs/setup.md).
 For the security checklist see [`docs/security.md`](docs/security.md).
-For backend examples see [`docs/backends.md`](docs/backends.md). For
-contributing see [`docs/contributing.md`](docs/contributing.md). For
-where the project might go next see [`docs/roadmap.md`](docs/roadmap.md).
+For the backend JSON contract see
+[`docs/backend-contract.md`](docs/backend-contract.md). For backend
+examples see [`docs/backends.md`](docs/backends.md). For contributing
+see [`docs/contributing.md`](docs/contributing.md). For where the
+project might go next see [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Architecture
 
 ```
-┌─────────────┐                             ┌──────────────────┐
-│  PWA        │     POST /claude            │                  │     Anthropic API
-│  (phone     │  ────────────────────────►  │  VoxGate server  │  ────────────────────►  Claude
-│  home       │  ◄────────────────────────  │  (FastAPI)       │  ◄────────────────────  (claude-sonnet-4-5)
-│  screen)    │                             │                  │
-│             │     POST /prompt            │                  │     POST TARGET_URL
-│             │  ────────────────────────►  │                  │  ────────────────────►  Custom backend
-│             │  ◄────────────────────────  │                  │  ◄────────────────────  (e.g. zursetti-planner)
-└─────────────┘                             └──────────────────┘
+┌─────────────┐                            ┌──────────────────┐
+│  PWA        │                            │                  │
+│  (phone     │     POST /chat             │                  │     POST TARGET_URL
+│  home       │  ───────────────────────►  │  VoxGate server  │  ───────────────────►  Your backend
+│  screen)    │  ◄───────────────────────  │  (FastAPI)       │  ◄───────────────────  (LLM, planner, …)
+│             │                            │                  │
+└─────────────┘                            └──────────────────┘
+        │                                          ▲
+        │ Google Sign-In (id_token)                │
+        ▼                                          │
+   accounts.google.com                             │
+        │                                          │
+        └──────────────────────────────────────────┘
+                       Verified e-mail
 ```
 
-The server exposes two endpoints:
+VoxGate exposes a single chat endpoint:
 
-- **`/claude`** — calls the Anthropic API directly. Keeps conversation
-  history per session. Uses `ANTHROPIC_API_KEY`.
-- **`/prompt`** — forwards to a custom backend (`TARGET_URL`).
-  Stateless. Voice gateway for any chatbot service.
+- **`POST /chat`** — authenticated request. VoxGate enriches with the
+  verified user e-mail and forwards to `TARGET_URL`. Strict response
+  contract (see `docs/backend-contract.md`).
 
 ## API reference
 
@@ -175,45 +186,45 @@ All authenticated endpoints require:
 The PWA handles both transparently. For programmatic access, log in
 through `POST /auth/login/google` first and reuse the cookie jar.
 
-### `POST /claude`
+### `POST /chat`
 
 ```json
-POST /claude
+POST /chat
 Cookie: vg_session=…; vg_csrf=…
 X-CSRF-Token: <value of vg_csrf>
 Content-Type: application/json
 
 {
-  "text": "What time is it in Tokyo?",
-  "session_id": "550e8400-e29b-41d4-a716-446655440000"
+  "text": "Hello backend",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "lang": "de-CH"
 }
 ```
 
-Response: `{ "response": "Currently it's …" }`
-
-`session_id` must match `^[A-Za-z0-9_-]{8,128}$`. Up to 20 messages
-per session are kept in memory; older ones are dropped in pairs.
-
-### `POST /prompt`
+VoxGate forwards to `TARGET_URL` with this payload:
 
 ```json
-POST /prompt
-Cookie: vg_session=…; vg_csrf=…
-X-CSRF-Token: <value of vg_csrf>
-Content-Type: application/json
-
-{ "text": "Hello backend" }
+{
+  "user": "Hello backend",
+  "user_email": "alice@example.com",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "metadata": { "lang": "de-CH", "instance": "VoxGate" }
+}
 ```
 
-VoxGate forwards to `TARGET_URL` and expects JSON with a `response`
-(or `text`) field back.
+The backend **must** respond with `{"response": "<text>"}` exactly.
+Anything else (missing key, wrong type, non-JSON, plain text) is a
+contract violation and surfaces as a `502` to the PWA. Full reference:
+[`docs/backend-contract.md`](docs/backend-contract.md).
 
 ### `GET /config`
 
 Returns instance configuration for the PWA. No auth.
 
 ```json
-{ "name": "Claude", "color": "#c8ff00", "lang": "de-CH", "maxLength": 4000,
+{ "name": "VoxGate", "color": "#c8ff00", "lang": "de-CH",
+  "langs": ["de-CH", "fr-CH", "it-CH", "en-US", "es-ES"],
+  "maxLength": 4000,
   "googleClientId": "123-abc.apps.googleusercontent.com",
   "providers": ["google"] }
 ```
@@ -235,28 +246,31 @@ The `ALLOWED_EMAILS` env var accepts entries like `alice@example.com`
 
 | Code | Meaning |
 |---|---|
-| 401 | Token missing or wrong |
+| 401 | Session missing or expired |
+| 403 | E-mail not on allowlist, CSRF missing, or cross-origin |
 | 422 | Validation failed |
 | 429 | Rate limit exceeded |
-| 502 | Backend error |
-| 503 | Backend not configured |
+| 502 | Backend unreachable, errored, or violated the response contract |
+| 503 | TARGET_URL not configured |
 
 ## File structure
 
 ```
 voxgate/
-├── server.py              # FastAPI gateway (/claude, /prompt, /config)
+├── server.py              # FastAPI gateway (/chat, /config, /auth/*)
+├── auth/                  # Google ID-token verification + session cookies
 ├── pwa/                   # PWA (HTML, JS, CSS, manifest, service worker)
 ├── tests/                 # pytest tests
 ├── deploy/
 │   └── caddy/             # Bundled Caddy + VoxGate (recommended path)
 ├── docs/
-│   ├── setup.md           # Installation and operation
-│   ├── security.md        # Operator checklist
-│   ├── contributing.md    # Development workflow
-│   ├── backends.md        # /prompt and /claude examples
-│   ├── roadmap.md         # Future-development ideas
-│   └── lessons.md         # Lessons learned
+│   ├── setup.md             # Installation and operation
+│   ├── security.md          # Operator checklist
+│   ├── contributing.md      # Development workflow
+│   ├── backend-contract.md  # /chat → TARGET_URL JSON schema (strict)
+│   ├── backends.md          # Example backend implementations
+│   ├── roadmap.md           # Future-development ideas
+│   └── lessons.md           # Lessons learned
 ├── .claude/rules/         # Code rules for Claude Code
 ├── .env.example           # Configuration template (api-only, root)
 ├── docker-compose.yml     # api-only (no proxy bundled)
