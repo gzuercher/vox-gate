@@ -24,20 +24,25 @@ right after.
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/` | GET | none | The PWA itself (HTML/JS/CSS) |
+| `/` | GET | none | The PWA itself, plus every static asset under it (`/app.js`, `/auth.js`, `/styles.css`, `/manifest.json`, `/icon.svg`, `/sw.js`, `/platform.js`, `/debug.js`) |
 | `/integration` | GET | none | This page (markdown) |
 | `/config` | GET | none | PWA config — branding, languages, Google client ID, max prompt length. JSON. |
 | `/openapi.json` | GET | none | OpenAPI spec for VoxGate's HTTP surface (machine-readable) |
 | `/docs` | GET | none | Interactive Swagger UI for the same spec |
 | `/redoc` | GET | none | Alternative ReDoc rendering of the same spec |
 | `/chat` | POST | session cookie + CSRF | The one endpoint the PWA calls for every chat turn. Body: `{text, session_id, lang}`. Returns `{response}`. Forwards to `TARGET_URL` using the contract below. |
-| `/auth/login/{provider}` | POST | none (origin-checked) | Exchange a provider ID token for a VoxGate session. Today only `provider=google`. |
+| `/auth/login/{provider}` | POST | none (origin-checked, rate-limited) | Exchange a provider ID token for a VoxGate session. Today only `provider=google`. Returns `429` after `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` (default 10/min/IP). |
 | `/auth/logout` | POST | session + CSRF (when logged in) | Clears session and CSRF cookies. Idempotent. |
 | `/auth/me` | GET | session cookie | `{email, provider}` of the signed-in user, or 401. |
 | `/auth/providers` | GET | none | `{providers: [...]}` — identity providers this instance has registered. |
 | `/debug-log` | POST | `X-Debug-Token` | 404 unless `DEBUG_ENABLED=1`. PWA opt-in diagnostics overlay. |
 
 That's the entire surface. If you need anything else, you're guessing.
+
+**No dedicated health-check endpoint.** Probes should hit `GET /config`
+— it is cheap, requires no auth, and exercises the real request path
+(middleware, CSP headers, JSON serialisation). A 200 there means the
+process is alive and serving.
 
 ## Where to find the rest
 
