@@ -1,5 +1,11 @@
 # Backend contract
 
+> **Live version:** every running VoxGate instance serves this document
+> at `GET /backend-contract` (no auth, `text/markdown`). Backend
+> integrators can `curl https://<voxgate-host>/backend-contract` to get
+> the contract their target instance is actually shipping with — no need
+> to check out the repo or guess the version.
+
 VoxGate is a pure forwarding proxy. Every authenticated `POST /chat` is
 enriched with the verified user e-mail and forwarded to `TARGET_URL`.
 The backend at `TARGET_URL` is responsible for all chat logic — system

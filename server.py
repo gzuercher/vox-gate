@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 import secrets
 import sys
 import time
@@ -8,7 +9,7 @@ from collections import deque
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -247,6 +248,24 @@ async def debug_log(request: Request):
             _debug_buckets.pop(stale_ip, None)
     print(f"DEBUG ip={ip} {body.decode('utf-8', errors='replace')}", file=sys.stderr, flush=True)
     return JSONResponse(status_code=204, content=None)
+
+
+@app.get("/backend-contract")
+async def backend_contract():
+    """Serve docs/backend-contract.md live so integrators implementing
+    TARGET_URL can curl the canonical contract without checking out the
+    repo. Public, no auth — the contract is not a secret. The Dockerfile
+    copies the file to /app/backend-contract.md at build time so doc
+    changes ship with the image.
+    """
+    candidates = [
+        pathlib.Path(__file__).resolve().parent / "backend-contract.md",
+        pathlib.Path(__file__).resolve().parent / "docs" / "backend-contract.md",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/markdown")
+    raise HTTPException(status_code=404, detail="Backend contract document not bundled")
 
 
 @app.get("/config")

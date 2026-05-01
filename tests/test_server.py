@@ -149,6 +149,37 @@ class TestConfigEndpoint:
 
 
 # -----------------------------------------------------------------------------
+# /backend-contract — live documentation
+# -----------------------------------------------------------------------------
+
+
+class TestBackendContractEndpoint:
+    """Integrators implementing TARGET_URL can curl this URL to get the
+    canonical contract without checking out the repo."""
+
+    def test_served_as_markdown(self):
+        client = _reload_app(login=False)
+        res = client.get("/backend-contract")
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("text/markdown")
+
+    def test_describes_request_and_response_shape(self):
+        client = _reload_app(login=False)
+        body = client.get("/backend-contract").text
+        # Cheap sanity: every contract field must appear by name.
+        for token in (
+            "user_email", "session_id", "metadata", '"response"',
+            "TARGET_URL", "TARGET_TOKEN", "502",
+        ):
+            assert token in body, f"missing {token!r} in /backend-contract"
+
+    def test_unauthenticated_access(self):
+        client = _reload_app(login=False)
+        # Public on purpose; do not require auth.
+        assert client.get("/backend-contract").status_code == 200
+
+
+# -----------------------------------------------------------------------------
 # /chat — request validation
 # -----------------------------------------------------------------------------
 

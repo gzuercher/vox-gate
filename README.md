@@ -186,6 +186,14 @@ All authenticated endpoints require:
 The PWA handles both transparently. For programmatic access, log in
 through `POST /auth/login/google` first and reuse the cookie jar.
 
+### `GET /backend-contract`
+
+Public, no auth. Serves `docs/backend-contract.md` as `text/markdown`.
+Useful for backend integrators: they can `curl
+https://<your-voxgate-host>/backend-contract` to get the contract
+their target instance ships with, instead of guessing from the repo
+version.
+
 ### `POST /chat`
 
 ```json
