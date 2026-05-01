@@ -1041,7 +1041,12 @@
       const reply = data.response;
 
       typingDiv.classList.remove('typing');
-      typingDiv.querySelector('.message-bubble').textContent = reply;
+      const bubble = typingDiv.querySelector('.message-bubble');
+      if (window.renderMarkdown) {
+        window.renderMarkdown(reply, bubble);
+      } else {
+        bubble.textContent = reply;
+      }
       setStatus('online');
       speak(reply);
     } catch (err) {
