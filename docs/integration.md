@@ -149,6 +149,43 @@ exactly. Backends do not return images via the `/chat` contract. If
 that becomes useful, it is a separate contract change with its own
 discussion.
 
+#### Recommended backend handling (suggestion, not contract)
+
+Where a backend stores attachment bytes is its own choice — VoxGate
+takes no opinion. But every backend ends up making the same handful
+of decisions, so here is a sane default that downstream tools (LLM
+containers, audit scripts, future backends sharing the same volume)
+can rely on:
+
+- **Storage path:** decode `data` and write to a deterministic path
+  keyed by session and attachment index, e.g.
+  `/data/voxgate/<session_id>/<idx>-<sanitised_name>`. Sanitise
+  `name` to a safe filename (strip path separators, control chars,
+  cap length); fall back to `<idx>.<ext>` derived from `mime` when
+  `name` is empty.
+- **Determinism:** `<session_id>` from the request as the directory,
+  `<idx>` (0-based) as the prefix. Re-uploads in the same session
+  overwrite predictably, which is usually what the user expects when
+  iterating ("no, this photo").
+- **Lifetime:** clean up either when the user starts a new session
+  (the PWA mints a fresh `session_id` on "Neues Gespräch") or via a
+  daily cron that drops directories older than 24 h. Pick whichever
+  fits your retention policy. VoxGate keeps no state about
+  attachments and cannot signal session boundaries to you.
+- **Hand-off to LLM containers:** if the LLM runs in a sibling
+  container, mount the same `/data/voxgate/` directory read-only
+  into that container and pass the path string in the prompt. Avoid
+  re-base64-ing the bytes for the LLM — file-on-disk is faster and
+  Claude's `Read` tool handles it natively.
+- **Privacy / GDPR:** these files contain user-uploaded images. They
+  belong to the same data-protection regime as anything else the
+  backend stores. Document the retention period; do not back up
+  indefinitely without thinking about it.
+
+None of this is enforced by VoxGate. A backend that prefers S3 keys,
+sqlite blobs, or in-memory caching is equally fine — the contract is
+the JSON shape above, nothing more.
+
 ## Response: backend → VoxGate
 
 The backend must respond with HTTP 2xx **and** a JSON body of exactly
