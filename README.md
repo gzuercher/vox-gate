@@ -175,92 +175,14 @@ VoxGate exposes a single chat endpoint:
 
 - **`POST /chat`** — authenticated request. VoxGate enriches with the
   verified user e-mail and forwards to `TARGET_URL`. Strict response
-  contract (see `docs/integration.md`).
+  contract.
 
-## API reference
-
-All authenticated endpoints require:
-
-- the `vg_session` cookie (set by `POST /auth/login/{provider}`),
-- a matching `X-CSRF-Token` header echoing the `vg_csrf` cookie.
-
-The PWA handles both transparently. For programmatic access, log in
-through `POST /auth/login/google` first and reuse the cookie jar.
-
-### `GET /integration`
-
-Public, no auth. Serves `docs/integration.md` as `text/markdown`.
-Useful for backend integrators: they can `curl
-https://<your-voxgate-host>/integration` to get the contract
-their target instance ships with, instead of guessing from the repo
-version.
-
-### `POST /chat`
-
-```json
-POST /chat
-Cookie: vg_session=…; vg_csrf=…
-X-CSRF-Token: <value of vg_csrf>
-Content-Type: application/json
-
-{
-  "text": "Hello backend",
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "lang": "de-CH"
-}
-```
-
-VoxGate forwards to `TARGET_URL` with this payload:
-
-```json
-{
-  "user": "Hello backend",
-  "user_email": "alice@example.com",
-  "session_id": "550e8400-e29b-41d4-a716-446655440000",
-  "metadata": { "lang": "de-CH", "instance": "VoxGate" }
-}
-```
-
-The backend **must** respond with `{"response": "<text>"}` exactly.
-Anything else (missing key, wrong type, non-JSON, plain text) is a
-contract violation and surfaces as a `502` to the PWA. Full reference:
-[`docs/integration.md`](docs/integration.md).
-
-### `GET /config`
-
-Returns instance configuration for the PWA. No auth.
-
-```json
-{ "name": "VoxGate", "color": "#c8ff00", "lang": "de-CH",
-  "langs": ["de-CH", "fr-CH", "it-CH", "en-US", "es-ES"],
-  "maxLength": 4000,
-  "googleClientId": "123-abc.apps.googleusercontent.com",
-  "providers": ["google"] }
-```
-
-### Auth endpoints
-
-| Endpoint | Auth | Purpose |
-|---|---|---|
-| `POST /auth/login/{provider}` | none — Origin-checked when `ALLOWED_ORIGIN` is set | Exchange a provider ID token for a VoxGate session. Body: `{"id_token": "..."}`. Today only `provider=google` is registered; unknown providers return 404. Sets `vg_session` (HttpOnly) and `vg_csrf` cookies. |
-| `POST /auth/logout` | session cookie + CSRF (when logged in) | Clears both cookies. Idempotent: if no session is present, returns 200 without requiring CSRF. |
-| `GET /auth/me` | session cookie | Returns `{"email": "...", "provider": "..."}` for the signed-in user, or 401 if no valid session. Re-runs the allowlist check, so a revoked user gets 403 even with a still-valid cookie. |
-| `GET /auth/providers` | none | Returns `{"providers": ["google", ...]}` — the identity providers configured for this instance. |
-
-The `ALLOWED_EMAILS` env var accepts entries like `alice@example.com`
-(any configured provider acceptable) or `alice@example.com:google`
-(only via Google). Useful once a second provider is registered.
-
-### Errors
-
-| Code | Meaning |
-|---|---|
-| 401 | Session missing or expired |
-| 403 | E-mail not on allowlist, CSRF missing, or cross-origin |
-| 422 | Validation failed |
-| 429 | Rate limit exceeded |
-| 502 | Backend unreachable, errored, or violated the response contract |
-| 503 | TARGET_URL not configured |
+The full HTTP surface (endpoints, request/response shapes,
+attachments, error codes, auth flows) is documented in
+[`docs/integration.md`](docs/integration.md). That file is also
+served live at `GET /integration` on every running instance — backend
+integrators can `curl https://<voxgate-host>/integration` to fetch
+the exact contract their target version ships with.
 
 ## File structure
 
@@ -273,21 +195,24 @@ voxgate/
 ├── deploy/
 │   └── caddy/             # Bundled Caddy + VoxGate (recommended path)
 ├── docs/
-│   ├── setup.md             # Installation and operation
-│   ├── security.md          # Operator checklist
-│   ├── contributing.md      # Development workflow
-│   ├── integration.md  # /chat → TARGET_URL JSON schema (strict)
-│   ├── backends.md          # Example backend implementations
-│   ├── roadmap.md           # Future-development ideas
-│   └── lessons.md           # Lessons learned
-├── .claude/rules/         # Code rules for Claude Code
-├── .env.example           # Configuration template (api-only, root)
-├── docker-compose.yml     # api-only (no proxy bundled)
+│   ├── setup.md            # Installation and operation
+│   ├── security.md         # Operator security checklist
+│   ├── contributing.md     # Development workflow
+│   ├── integration.md      # HTTP surface + /chat → TARGET_URL contract
+│   ├── backends.md         # Runnable example backends (FastAPI, Express, …)
+│   ├── roadmap.md          # Future-development ideas (incl. "Shipped")
+│   └── lessons.md          # Architecture-decision log (mistakes + fixes)
+├── .github/                # CI workflow + PR/issue templates
+├── .claude/rules/          # Binding code rules for human + Claude contributors
+├── CHANGELOG.md            # User-visible changes per version
+├── SECURITY.md             # Vulnerability disclosure policy
+├── .env.example            # Configuration template (api-only, root)
+├── docker-compose.yml      # api-only (no proxy bundled)
 ├── Dockerfile
 ├── pyproject.toml
-├── Makefile               # make setup/run/test/lint
-├── README.md              # This file
-├── CLAUDE.md              # Playbook for Claude Code
+├── Makefile                # make setup/run/test/lint
+├── README.md               # This file
+├── CLAUDE.md               # Playbook for Claude Code
 └── LICENSE
 ```
 
