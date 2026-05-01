@@ -17,17 +17,6 @@ estimated time:
 
 ## Höher
 
-### Automatic dark/light mode
-- **Value:** the UI is currently dark-only. Daylight readability on
-  phones suffers when the system is set to light mode. Following
-  `prefers-color-scheme` would make VoxGate fit the device context
-  without manual toggling — relevant for productive daily use.
-- **Cost:** small. Move the existing palette into a `:root` /
-  `@media (prefers-color-scheme: light)` split, derive `--accent-dim`
-  for the light variant, verify contrast on the auth overlay and
-  message bubbles. Per-instance `INSTANCE_COLOR` already drives the
-  accent, so no server change needed.
-
 ### Streaming responses (SSE)
 - **Value:** backend replies start playing/showing within ~500 ms
   instead of after the full response. The single biggest
@@ -59,16 +48,23 @@ estimated time:
   banner instead of silently failing. Going further (server-side STT
   fallback) is a separate item under Normal.
 
-### Image / camera input
-- **Value:** point phone camera at something, ask the backend about it.
-  Multimodal is a natural fit for a phone voice gateway, currently
-  unused. Whether the backend's LLM supports vision is the backend's
-  problem.
-- **Cost:** **contract change.** PWA: capture button + preview. Server:
-  image upload path (base64 in JSON, or multipart). Extension to the
-  TARGET_URL contract (e.g. `attachments: [{mime, data}]`). Privacy
-  considerations (where does the image live, audit log, etc.) move
-  to the backend along with the data.
+---
+
+## Shipped
+
+Items that used to live in the active sections above and are now in
+production. Kept here briefly so old links resolve and the "what
+shipped recently" question has an answer; full per-version detail
+lives in [`../CHANGELOG.md`](../CHANGELOG.md).
+
+- **Image / camera input** (2026-04-30). PWA captures or picks an
+  image, downscales to 1600 px JPEG quality 0.85, base64-forwards via
+  the `attachments[]` field of the `/chat` → TARGET_URL contract.
+  One-way today (responses still match `{"response": "..."}`). Full
+  contract: [`integration.md`](integration.md#attachments-one-way-client--backend).
+- **Automatic dark/light mode** (2026-04-30). `<html data-theme>`
+  drives the palette; the menu offers a 3-way Auto / Light / Dark
+  picker that follows `prefers-color-scheme` in Auto.
 
 ---
 

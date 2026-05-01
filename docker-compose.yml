@@ -4,9 +4,9 @@
 # (which also enables TRUST_PROXY_HEADERS=1). Setting that flag here would
 # allow clients to spoof X-Forwarded-For and forge their IP in logs.
 #
-# To run multiple instances side by side (e.g. one for direct Claude, one
-# forwarding to a custom backend), see the "Multi-instance" section in
-# docs/setup.md.
+# To run multiple instances side by side (each forwarding to a different
+# TARGET_URL — e.g. one for the family, one for an experimental backend),
+# see the "Multi-instance" section in docs/setup.md.
 services:
   voxgate:
     build: .

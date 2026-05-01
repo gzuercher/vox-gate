@@ -2,35 +2,15 @@
 
 VoxGate has one chat endpoint, `/chat`. Every authenticated request is
 forwarded to `TARGET_URL` using the strict JSON contract documented in
-[`integration.md`](integration.md). Read that first — this
-file shows minimal implementations that fulfil the contract.
+[`integration.md`](integration.md). **Read that first** — this file
+only shows minimal runnable backends that fulfil the contract. The
+contract itself (request/response shapes, attachments, validation,
+failure modes, test-mode flag) lives in `integration.md` and is the
+source of truth.
 
-What VoxGate sends:
-
-```
-POST <TARGET_URL>
-Authorization: Bearer <TARGET_TOKEN>      # only if TARGET_TOKEN is set
-Content-Type: application/json
-
-{
-  "user":        "voice or typed input",
-  "user_email":  "alice@example.com",
-  "session_id":  "550e8400-e29b-41d4-a716-446655440000",
-  "metadata":    { "lang": "de-CH", "instance": "VoxGate" }
-}
-```
-
-What VoxGate expects back, **strictly**:
-
-```json
-{ "response": "<assistant reply, plain string>" }
-```
-
-Anything else surfaces as `502` to the PWA — no silent passthrough.
-
-> ⚠️ Bind your backend only to `127.0.0.1` (or a private network), or
-> require a `TARGET_TOKEN` of its own. Otherwise VoxGate inadvertently
-> exposes your backend to the internet.
+> ⚠️ Bind any backend below to `127.0.0.1` (or a private Docker
+> network), or require a `TARGET_TOKEN` of its own. Otherwise VoxGate
+> inadvertently exposes your backend to the internet.
 
 ## Python / FastAPI — minimal echo
 
@@ -44,11 +24,12 @@ async def chat(req: Request):
     body = await req.json()
     user = body["user"]
     email = body["user_email"]
+    # body may also include body["attachments"] — list of
+    # {kind, mime, name, data}. See integration.md#attachments.
     return {"response": f"hello {email}, you said: {user}"}
 ```
 
-Run: `uvicorn app:app --host 127.0.0.1 --port 9000`
-
+Run: `uvicorn app:app --host 127.0.0.1 --port 9000`.
 VoxGate `.env`: `TARGET_URL=http://127.0.0.1:9000/`.
 
 ## Python / FastAPI — voice-to-Claude adapter
@@ -88,8 +69,15 @@ async def chat(req: Request):
     return {"response": reply}
 ```
 
-`pip install fastapi uvicorn anthropic`. Run on a private port and
-configure `TARGET_URL=http://127.0.0.1:9000/` in VoxGate's `.env`.
+`pip install fastapi uvicorn anthropic`. Run on a private port; set
+`TARGET_URL=http://127.0.0.1:9000/` in VoxGate's `.env`.
+
+This adapter ignores any `body["attachments"]`. To pass images
+through to Claude as a vision input, decode each attachment's `data`
+field (base64) and append it as a `{"type": "image", "source": ...}`
+content block to the user message — see
+[`integration.md#attachments-one-way-client--backend`](integration.md#attachments-one-way-client--backend)
+for the field semantics.
 
 ## Node / Express — echo
 
@@ -97,7 +85,7 @@ configure `TARGET_URL=http://127.0.0.1:9000/` in VoxGate's `.env`.
 import express from "express";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "20mb" })); // enough headroom for attachments
 
 app.post("/", (req, res) => {
   const { user, user_email } = req.body;
@@ -121,30 +109,8 @@ done
 ## Your own service
 
 If your service already has an HTTP API (e.g. a planner with its own
-business logic), give it an endpoint that accepts the contract above
-and returns `{"response": "..."}`. The `user_email` field is verified
-by VoxGate via Google Sign-In; backends can rely on it for ACL
-decisions and *should not* trust any client-provided e-mail.
-
-## Authentication scheme reminder
-
-VoxGate is the auth boundary. By the time a request arrives at your
-backend:
-
-- The user's e-mail has been verified by Google.
-- The e-mail is on the operator's `ALLOWED_EMAILS` list.
-- CSRF and Origin checks have already passed.
-
-The backend can therefore trust `user_email` and treat the request as
-an authorised action by that user.
-
-## Error codes (PWA-visible)
-
-| Code | Meaning |
-|---|---|
-| 401 | Not signed in (cookie missing or expired). |
-| 403 | E-mail not in `ALLOWED_EMAILS`, CSRF missing/wrong, or cross-origin. |
-| 422 | Validation failed (e.g. `text` too long/empty, `session_id` invalid). |
-| 429 | Rate limit exceeded. |
-| 502 | Backend unreachable, errored, or violated the response contract. |
-| 503 | TARGET_URL not configured. |
+business logic), give it an endpoint that accepts the
+[contract](integration.md#backend-contract) and returns
+`{"response": "..."}`. The `user_email` field is verified by VoxGate
+via Google Sign-In; backends can rely on it for ACL decisions and
+*should not* trust any client-provided e-mail.
