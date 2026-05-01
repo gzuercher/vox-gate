@@ -389,11 +389,24 @@ async def chat(
         headers["Authorization"] = f"Bearer {TARGET_TOKEN}"
 
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+        # Bracket the backend call with explicit perf_counter timestamps
+        # so the access log reveals how much of the /chat latency is
+        # spent waiting on TARGET_URL vs. on VoxGate itself. ms is enough
+        # resolution for human-scale debugging.
+        t0 = time.perf_counter()
         try:
             res = await client.post(TARGET_URL, json=payload, headers=headers)
         except httpx.RequestError:
-            logger.warning("backend_unreachable ip=%s", ip)
+            logger.warning(
+                "backend_unreachable ip=%s after_ms=%d",
+                ip, int((time.perf_counter() - t0) * 1000),
+            )
             raise HTTPException(status_code=502, detail="Backend unreachable")
+        backend_ms = int((time.perf_counter() - t0) * 1000)
+        logger.info(
+            "[%s] backend_roundtrip session=%s status=%d ms=%d",
+            INSTANCE_NAME, sid_short, res.status_code, backend_ms,
+        )
 
     if res.status_code >= 400:
         logger.warning("backend_error ip=%s status=%d", ip, res.status_code)

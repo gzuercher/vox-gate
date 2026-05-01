@@ -1,5 +1,11 @@
 FROM python:3.12-slim
 
+# Default to Swiss local time so uvicorn / app log timestamps match the
+# operator's wall clock. Operators in other zones can override via the
+# TZ env var in docker-compose without rebuilding. tzdata is bundled in
+# the python:3.12-slim base, so /usr/share/zoneinfo/Europe/Zurich exists.
+ENV TZ=Europe/Zurich
+
 WORKDIR /app
 
 # pyproject.toml is the single source of truth for runtime deps. Files
