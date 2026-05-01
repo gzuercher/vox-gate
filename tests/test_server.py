@@ -441,6 +441,141 @@ class TestChatStrictResponseContract:
 
 
 # -----------------------------------------------------------------------------
+# /selftest — authenticated end-to-end probe
+# -----------------------------------------------------------------------------
+
+
+class TestSelftestEndpoint:
+    """Authenticated diagnostic that exercises the same forward path as
+    /chat and reports per-clause whether the backend honours the contract."""
+
+    def test_requires_session(self):
+        client = _reload_app(login=False)
+        cm, _ = _mock_backend()
+        with cm:
+            res = client.post("/selftest")
+        assert res.status_code == 401
+
+    def test_requires_csrf(self):
+        client = _reload_app()
+        client.headers.pop("X-CSRF-Token", None)
+        cm, _ = _mock_backend()
+        with cm:
+            res = client.post("/selftest")
+        assert res.status_code == 403
+
+    def test_no_target_url_fails_first_check(self, monkeypatch):
+        monkeypatch.setenv("TARGET_URL", "")
+        client = _reload_app()
+        # No backend mock — the endpoint short-circuits before any HTTP.
+        res = client.post("/selftest")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["ok"] is False
+        # The first failed check must be the missing config.
+        first = body["checks"][0]
+        assert first["name"] == "target_url_configured"
+        assert first["ok"] is False
+
+    def test_happy_path_all_checks_pass(self):
+        client = _reload_app()
+        cm, captured = _mock_backend({"response": "pong"})
+        with cm:
+            res = client.post("/selftest")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["ok"] is True
+        names = [c["name"] for c in body["checks"]]
+        assert names == [
+            "target_url_configured",
+            "backend_reachable",
+            "status_2xx",
+            "response_is_json",
+            "response_is_object",
+            "response_field_string",
+        ]
+        assert all(c["ok"] for c in body["checks"])
+        assert body["response"]["body_preview"] == "pong"
+
+    def test_payload_carries_test_flag(self):
+        client = _reload_app()
+        cm, captured = _mock_backend({"response": "ok"})
+        with cm:
+            client.post("/selftest")
+        sent = captured["json"]
+        # Backends respecting metadata.test=true can no-op.
+        assert sent["metadata"]["test"] is True
+        # Same shape contract as /chat.
+        assert sent["user"] == "VoxGate self-test ping"
+        assert sent["user_email"] == TEST_EMAIL
+        assert sent["session_id"].startswith("selftest-")
+        assert sent["metadata"]["instance"] == "TestBot"
+
+    def test_unreachable_backend_reports_at_reachable_check(self):
+        client = _reload_app()
+        cm, _ = _mock_backend(raise_error=True)
+        with cm:
+            res = client.post("/selftest")
+        body = res.json()
+        assert body["ok"] is False
+        failed = next(c for c in body["checks"] if not c["ok"])
+        assert failed["name"] == "backend_reachable"
+
+    def test_4xx_backend_reports_at_status_check(self):
+        client = _reload_app()
+        cm, _ = _mock_backend(status_code=403, json_body={"response": "denied"})
+        with cm:
+            res = client.post("/selftest")
+        body = res.json()
+        assert body["ok"] is False
+        failed = next(c for c in body["checks"] if not c["ok"])
+        assert failed["name"] == "status_2xx"
+        assert "403" in failed["detail"]
+        # Response body preview is preserved so the user can see what the
+        # backend actually said.
+        assert body["response"]["status"] == 403
+
+    def test_non_json_backend_reports_at_json_check(self):
+        client = _reload_app()
+        cm, _ = _mock_backend(text_body="plain text", status_code=200)
+        with cm:
+            res = client.post("/selftest")
+        body = res.json()
+        failed = next(c for c in body["checks"] if not c["ok"])
+        assert failed["name"] == "response_is_json"
+
+    def test_wrong_shape_reports_at_field_check(self):
+        client = _reload_app()
+        cm, _ = _mock_backend({"text": "old-style key"})
+        with cm:
+            res = client.post("/selftest")
+        body = res.json()
+        failed = next(c for c in body["checks"] if not c["ok"])
+        assert failed["name"] == "response_field_string"
+        assert "text" in failed["detail"]  # the offending key is named
+
+    def test_bearer_token_is_redacted_in_response(self, monkeypatch):
+        monkeypatch.setenv("TARGET_TOKEN", "super-secret-shared-token")
+        client = _reload_app()
+        cm, _ = _mock_backend({"response": "ok"})
+        with cm:
+            res = client.post("/selftest")
+        body = res.json()
+        # Caller sees a placeholder, not the real token.
+        assert body["request"]["headers"]["Authorization"] == "Bearer ***redacted***"
+        # And the real token never appears anywhere in the response body.
+        assert "super-secret-shared-token" not in res.text
+
+    def test_no_token_set_means_no_auth_header_in_diagnostic(self):
+        client = _reload_app()
+        cm, _ = _mock_backend({"response": "ok"})
+        with cm:
+            res = client.post("/selftest")
+        headers = res.json()["request"]["headers"]
+        assert "Authorization" not in headers
+
+
+# -----------------------------------------------------------------------------
 # Auth + session
 # -----------------------------------------------------------------------------
 

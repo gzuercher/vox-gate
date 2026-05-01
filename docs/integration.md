@@ -31,6 +31,7 @@ right after.
 | `/docs` | GET | none | Interactive Swagger UI for the same spec |
 | `/redoc` | GET | none | Alternative ReDoc rendering of the same spec |
 | `/chat` | POST | session cookie + CSRF | The one endpoint the PWA calls for every chat turn. Body: `{text, session_id, lang}`. Returns `{response}`. Forwards to `TARGET_URL` using the contract below. |
+| `/selftest` | POST | session cookie + CSRF | Authenticated diagnostic. Sends a synthetic request through the same forward path as `/chat` and returns a structured per-clause report (target configured, reachable, 2xx, JSON, object, response-string). Use it to debug "is my backend wired correctly?" without grepping logs. Sets `metadata.test=true` (see [test-mode flag](#test-mode-flag)). |
 | `/auth/login/{provider}` | POST | none (origin-checked, rate-limited) | Exchange a provider ID token for a VoxGate session. Today only `provider=google`. Returns `429` after `AUTH_LOGIN_RATE_LIMIT_PER_MINUTE` (default 10/min/IP). |
 | `/auth/logout` | POST | session + CSRF (when logged in) | Clears session and CSRF cookies. Idempotent. |
 | `/auth/me` | GET | session cookie | `{email, provider}` of the signed-in user, or 401. |
@@ -184,6 +185,52 @@ The backend can therefore trust `user_email` and treat the request as
 an authorised action by that user. There is no shared bearer token to
 verify on the backend side beyond the optional `TARGET_TOKEN` you set
 yourself.
+
+## Test-mode flag
+
+When VoxGate's `POST /selftest` probe forwards to the backend, it
+includes `metadata.test = true` (boolean) in the payload. Backends
+*should* check this flag and either short-circuit (no real side
+effects, e.g. don't write a calendar entry) or echo a synthetic
+response. Backends that ignore the flag will process the request as a
+normal `/chat` turn — the user typing "VoxGate self-test ping" by hand
+would have the same effect.
+
+Recognising the flag is a backend-side opt-in convention, not a hard
+contract requirement. Document in your backend whether it honours
+`metadata.test`.
+
+## Self-test diagnostic shape
+
+`POST /selftest` returns JSON like this on success:
+
+```json
+{
+  "ok": true,
+  "checks": [
+    {"name": "target_url_configured", "ok": true,  "detail": "http://zplanner:8090/prompt"},
+    {"name": "backend_reachable",     "ok": true,  "detail": "connected in 23ms"},
+    {"name": "status_2xx",            "ok": true,  "detail": "HTTP 200"},
+    {"name": "response_is_json",      "ok": true,  "detail": ""},
+    {"name": "response_is_object",    "ok": true,  "detail": ""},
+    {"name": "response_field_string", "ok": true,  "detail": "got 4 chars"}
+  ],
+  "request":  { "url": "...", "method": "POST", "headers": {...}, "body": {...} },
+  "response": { "status": 200, "elapsed_ms": 23, "body_preview": "pong" }
+}
+```
+
+On failure, `ok` flips to `false` and the offending check carries the
+diagnostic in its `detail`. Bearer tokens are masked as
+`Bearer ***redacted***` in the response — the real `TARGET_TOKEN` never
+appears in the diagnostic body. Curl example, given a valid session
+cookie jar:
+
+```bash
+CSRF=$(awk '$6=="vg_csrf"{print $7}' cookies.txt)
+curl -b cookies.txt -H "X-CSRF-Token: $CSRF" -X POST \
+     https://<voxgate-host>/selftest | jq .
+```
 
 ## Versioning
 

@@ -173,7 +173,7 @@ async def security_headers(request: Request, call_next):
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    if request.url.path == "/chat" and request.method == "POST":
+    if request.url.path in ("/chat", "/selftest") and request.method == "POST":
         ip = _client_ip(request)
         now = time.time()
         bucket = _rate_buckets.setdefault(ip, deque())
@@ -346,6 +346,119 @@ async def chat(
         raise HTTPException(status_code=502, detail="Backend response did not match contract")
 
     return {"response": data["response"]}
+
+
+@app.post("/selftest")
+async def selftest(
+    request: Request,
+    session: SessionData = Depends(verify_session),
+):
+    """Authenticated end-to-end probe of the VoxGate ↔ TARGET_URL wiring.
+
+    Runs the same forward path as /chat (same payload shape, same headers,
+    same timeout) and reports per-clause: TARGET_URL configured, backend
+    reachable, 2xx status, valid JSON, object root, `response` is a string.
+    Returns a structured JSON diagnostic — operators and backend integrators
+    can `curl -b cookies.txt -H "X-CSRF-Token: …" -X POST /selftest` to
+    pinpoint exactly which contract clause a misbehaving backend violates,
+    without grepping container logs.
+
+    The probe payload sets `metadata.test=true`. Backends that respect this
+    flag are expected to no-op (no real side effects) and return an echoed
+    response. Backends that ignore it process the request normally — be
+    aware that running /selftest then triggers whatever side effects a real
+    /chat call would.
+    """
+    diag: dict = {"ok": True, "checks": [], "request": None, "response": None}
+
+    def passed(name: str, detail: str = "") -> None:
+        diag["checks"].append({"name": name, "ok": True, "detail": detail})
+
+    def fail(name: str, detail: str) -> dict:
+        diag["ok"] = False
+        diag["checks"].append({"name": name, "ok": False, "detail": detail})
+        return diag
+
+    if not TARGET_URL:
+        return fail("target_url_configured", "TARGET_URL is empty in this VoxGate instance")
+    passed("target_url_configured", TARGET_URL)
+
+    sid = "selftest-" + secrets.token_hex(8)
+    payload = {
+        "user": "VoxGate self-test ping",
+        "user_email": session.email,
+        "session_id": sid,
+        "metadata": {
+            "lang": SPEECH_LANG,
+            "instance": INSTANCE_NAME,
+            "test": True,
+        },
+    }
+    # Caller-visible headers: never leak the real bearer token. The
+    # outbound request uses the real value; the diagnostic shows a
+    # placeholder so the caller can confirm "yes a token was sent" or
+    # "no, none was sent" without seeing the secret.
+    visible_headers = {"Content-Type": "application/json"}
+    outbound_headers = {"Content-Type": "application/json"}
+    if TARGET_TOKEN:
+        visible_headers["Authorization"] = "Bearer ***redacted***"
+        outbound_headers["Authorization"] = f"Bearer {TARGET_TOKEN}"
+
+    diag["request"] = {
+        "url": TARGET_URL,
+        "method": "POST",
+        "headers": visible_headers,
+        "body": payload,
+    }
+
+    ip = _client_ip(request)
+    logger.info(
+        "[%s] selftest ip=%s user=%s",
+        INSTANCE_NAME, ip, session.email,
+    )
+
+    t0 = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            res = await client.post(TARGET_URL, json=payload, headers=outbound_headers)
+    except httpx.RequestError as exc:
+        return fail("backend_reachable", f"{type(exc).__name__}: {exc}")
+    elapsed_ms = round((time.time() - t0) * 1000)
+    passed("backend_reachable", f"connected in {elapsed_ms}ms")
+
+    body_text = res.text
+    diag["response"] = {
+        "status": res.status_code,
+        "elapsed_ms": elapsed_ms,
+        "body_preview": body_text[:500],
+    }
+
+    if res.status_code >= 400:
+        return fail("status_2xx", f"backend returned HTTP {res.status_code}")
+    passed("status_2xx", f"HTTP {res.status_code}")
+
+    try:
+        data = res.json()
+    except ValueError:
+        return fail("response_is_json", "body could not be parsed as JSON")
+    passed("response_is_json", "")
+
+    if not isinstance(data, dict):
+        return fail("response_is_object", f"root is {type(data).__name__}, expected object")
+    passed("response_is_object", "")
+
+    resp_value = data.get("response")
+    if not isinstance(resp_value, str):
+        keys = list(data) if isinstance(data, dict) else []
+        return fail(
+            "response_field_string",
+            f"missing or wrong type — top-level keys={keys}, "
+            f"response={type(resp_value).__name__}",
+        )
+    passed("response_field_string", f"got {len(resp_value)} chars")
+
+    diag["response"]["body_preview"] = resp_value[:500]
+    return diag
 
 
 app.mount("/", StaticFiles(directory="pwa", html=True), name="pwa")
