@@ -105,7 +105,7 @@ Field semantics:
 |---|---|---|
 | `user` | user-typed | Free text. Validated for length (`MAX_PROMPT_LENGTH`, default 4000). May be empty if at least one attachment is present. |
 | `user_email` | **server-injected, verified** | Authenticated by Google + allowlisted by the operator. Backends can rely on this for ACL decisions and *should not* trust any client-provided e-mail field. |
-| `session_id` | client-generated | Opaque correlator. VoxGate keeps no state for it. The backend may use it as its own conversation key. |
+| `session_id` | client-generated | Opaque correlator. VoxGate keeps no state for it. The backend may use it as its own conversation key — see [Session history (backend-owned)](#session-history-backend-owned). |
 | `metadata.lang` | client-set | The UI language at the moment of sending. May differ from `INSTANCE_NAME`'s default. Hint, not a guarantee. |
 | `metadata.instance` | server-set | Useful when one backend serves multiple VoxGate instances (different families/contexts). |
 | `attachments` | user-uploaded, validated | Optional array. Omitted entirely when the user uploaded nothing — backends may branch on key presence. See "Attachments" below. |
@@ -237,6 +237,94 @@ the user should answer immediately:
 Both fields default to absent/`false` — existing backends are
 unaffected. They appear identically on `/chat` (legacy JSON) and inside
 the `final` SSE event (streaming).
+
+## Session history (backend-owned)
+
+VoxGate keeps **no** conversation state. `session_id` is forwarded
+opaquely on every turn; if the backend wants the assistant to
+remember earlier turns — including after a PWA reload, a phone
+restart, or a day-later return — it must persist them itself, keyed by
+`session_id`.
+
+The PWA persists `session_id` in `localStorage`, so the same value
+survives:
+
+- a page reload (accidental or deliberate),
+- closing and reopening the browser/PWA,
+- a device restart.
+
+A new `session_id` is minted only when the user taps **Neues Gespräch**
+in the PWA (or clears site data). Backends can therefore treat
+`session_id` as a stable conversation key for the lifetime the user
+considers a single conversation.
+
+### Backend responsibilities
+
+A backend that wants multi-turn memory should:
+
+1. **Store the user/assistant turn pair** under `session_id` on every
+   request — append-only is the simplest correct choice.
+2. **On the next request with the same `session_id`, prepend the prior
+   turns** to the LLM input (within whatever token budget you allow).
+3. **Apply a retention policy.** The PWA does not signal "session
+   over". Pick one of:
+   - **Sliding TTL:** drop sessions untouched for *N* days (e.g. 7).
+     A user returning the next day finds their context intact; a
+     session abandoned for a week is garbage-collected.
+   - **Hard cap:** keep the last *N* turns per session (e.g. 40) to
+     bound storage and context length independently of time.
+   - Both, combined, is fine.
+4. **Reset cleanly on a new `session_id`.** Treat it as a new
+   conversation — do not bleed context from a different session even
+   if `user_email` matches.
+
+### Multi-user on a shared backend
+
+When more than one person uses the same VoxGate instance (e.g. a
+family deployment with two e-mails in `ALLOWED_EMAILS`), key any
+per-user state on `user_email`, not on `session_id` alone.
+`session_id` is per-browser-profile and does not distinguish humans.
+A typical layout:
+
+- **Pool of SDK clients / LLM sessions:** `dict[user_email, client]`,
+  lazy-init on first request from that user.
+- **History store:** `dict[(user_email, session_id), list[turn]]`, or
+  just `dict[user_email, list[turn]]` if you don't care about
+  separate threads per browser profile.
+- **Reset semantics:** affect only the requesting `user_email`'s
+  slot, never another user's.
+
+This keeps parallel turns from different humans cleanly isolated
+without inventing a second identity layer in the PWA — `user_email`
+is already verified by VoxGate.
+
+### Storage choices
+
+VoxGate takes no opinion. In-process `dict` works for a single-worker
+backend and resets on restart (acceptable for short-lived contexts).
+SQLite/Redis/Postgres works when you want survival across deploys.
+The contract is the JSON shape above — anything that can map
+`session_id → list[turn]` is fine.
+
+### Privacy / GDPR
+
+Stored turns contain user prompts and assistant replies. Same
+data-protection regime as anything else the backend retains: document
+the retention period, allow deletion on request, and don't keep
+indefinitely without a reason. `user_email` is verified and stable —
+use it to scope deletion ("forget everything for this user") when
+required.
+
+### What VoxGate does *not* offer
+
+- No `GET /history` endpoint. The PWA does not pull prior turns back
+  on reload; the visible chat bubbles start empty. The backend's
+  context continues invisibly via the persisted `session_id`.
+- No server-push of "session expired". If the backend has dropped a
+  session, the next turn simply behaves as a fresh conversation.
+
+If pulling history back into the PWA on reload becomes useful, it is
+a separate contract change with its own discussion.
 
 ## Failure modes summary
 
@@ -559,7 +647,8 @@ below.
   `speechSynthesis` speaks it once the `final` event lands. Partial-
   sentence TTS is out of scope (see roadmap).
 - **Persistent server-side conversation log inside VoxGate.**
-  `session_id` stays opaque; backends own their own history.
+  `session_id` stays opaque; backends own their own history (see
+  [Session history (backend-owned)](#session-history-backend-owned)).
 
 ## Versioning
 

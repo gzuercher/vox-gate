@@ -379,11 +379,11 @@
   // already chose a value: '1' = muted (TTS off), '0' = TTS on.
   const _ttsStored = localStorage.getItem('voxMuted');
   let muted = _ttsStored === null ? true : _ttsStored === '1';
-  let sessionId = sessionStorage.getItem('voxSession');
+  let sessionId = localStorage.getItem('voxSession');
   if (!sessionId) {
     sessionId = (crypto.randomUUID ? crypto.randomUUID()
       : Date.now() + '-' + Math.random().toString(36).slice(2));
-    sessionStorage.setItem('voxSession', sessionId);
+    localStorage.setItem('voxSession', sessionId);
   }
 
   function activeLang() {
@@ -718,7 +718,7 @@
     if (state !== 'idle') discardReview();
     sessionId = (crypto.randomUUID ? crypto.randomUUID()
       : Date.now() + '-' + Math.random().toString(36).slice(2));
-    sessionStorage.setItem('voxSession', sessionId);
+    localStorage.setItem('voxSession', sessionId);
     messagesEl.innerHTML = '';
     if ('speechSynthesis' in window) speechSynthesis.cancel();
   });
